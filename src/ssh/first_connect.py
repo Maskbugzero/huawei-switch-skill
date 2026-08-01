@@ -11,6 +11,7 @@ SSH 首次连接 + 强制修改密码模块。
 
 from __future__ import annotations
 
+import re
 import time
 from typing import Optional
 
@@ -73,20 +74,56 @@ class SSHFirstConnect:
         """返回操作摘要。"""
         return f"SSHFirstConnect for {self.device.host}:{self.device.port}"
 
-    def _wait_for_output(self, shell, timeout: int = 8) -> str:
-        """等待 shell 输出直到出现提示符。"""
+    def _wait_for_output(self, shell, timeout: int = 8, custom_prompts: Optional[list] = None) -> tuple[str, bool]:
+        """
+        等待 shell 输出直到出现提示符或超时。
+
+        Returns:
+            tuple[str, bool]: (收集到的输出内容, 是否超时)
+        """
         output = ""
         end_time = time.time() + timeout
-        prompts = [">", "#", "]:", "password:", "Password:", "continue?"]
+
+        # 正则提示符模式（匹配行尾的典型 CLI 提示符）
+        # 这些模式专门为华为 VRP CLI 设计
+        prompt_patterns = [
+            r'>\s*$',                    # 用户视图提示符 (例如 <SW-01>)
+            r'#\s*$',                    # 系统视图提示符 (例如 [SW-01])
+            r'\]\s*$',                   # 交互提示符结尾 (例如 Continue? [Y/N])
+            r'[Pp]assword[:：]\s*$',     # 密码提示
+            r'[Cc]ontinue\?\s*\[Y/N\]',  # Continue 确认提示
+        ]
+
+        # 如果有自定义提示符，添加为字面匹配模式
+        if custom_prompts:
+            for p in custom_prompts:
+                # 转义特殊字符并添加行尾锚点
+                escaped = re.escape(p) + r'\s*$'
+                if escaped not in prompt_patterns:
+                    prompt_patterns.append(escaped)
 
         while time.time() < end_time:
-            if shell.recv_ready():
-                chunk = shell.recv(4096).decode("utf-8", errors="ignore")
-                output += chunk
-                if any(p in output for p in prompts):
-                    break
+            try:
+                if shell.recv_ready():
+                    chunk = shell.recv(4096).decode("utf-8", errors="ignore")
+                    output += chunk
+                    # 使用正则匹配提示符（多行模式，匹配行尾）
+                    for pattern in prompt_patterns:
+                        if re.search(pattern, output, re.MULTILINE | re.IGNORECASE):
+                            return output, False  # 未超时
+            except Exception as e:
+                logger.warning(f"_wait_for_output 接收数据异常: {e}")
+                break
             time.sleep(0.2)
-        return output
+
+        # 超时处理
+        timed_out = time.time() >= end_time
+        if timed_out:
+            logger.warning(f"_wait_for_output 超时（{timeout}s），已收集 {len(output)} 字符")
+            if output:
+                logger.debug(f"超时时的部分输出: {output[-200:]}")
+
+        return output, timed_out
 
     def change_password_and_verify(self) -> bool:
         """
@@ -95,9 +132,8 @@ class SSHFirstConnect:
         Returns:
             bool: 改密并验证是否成功
         """
-        print(f"\n=== 连接交换机 {self.device.host} ===")
-        print(f"用户名: {self.device.username}")
-        logger.info(f"开始 SSH 首次连接改密流程: {self.device.host}")
+        logger.info(f"=== 连接交换机 {self.device.host} ===")
+        logger.info(f"用户名: {self.device.username}")
 
         self.client = SSHClient()
         self.client.set_missing_host_key_policy(AutoAddPolicy())
@@ -113,50 +149,45 @@ class SSHFirstConnect:
                 look_for_keys=False,
                 allow_agent=False,
             )
-            print("[+] 第一次 SSH 连接成功")
-            logger.info("第一次 SSH 连接成功")
+            logger.info("[+] 第一次 SSH 连接成功")
 
             shell = self.client.invoke_shell()
             shell.settimeout(20)
             time.sleep(1)
 
-            initial_output = self._wait_for_output(shell, timeout=6)
-            print("[*] 初始输出:\n" + initial_output)
-            logger.info(f"初始输出: {initial_output[:200]}...")
+            initial_output, _ = self._wait_for_output(shell, timeout=6)
+            logger.debug("[*] 初始输出:\n" + initial_output)
 
             # 判断是否进入改密流程
             if "The password needs to be changed" in initial_output or "Continue? [Y/N]" in initial_output:
-                print("\n[!] 检测到需要修改密码，开始处理...")
+                logger.info("[!] 检测到需要修改密码，开始处理...")
 
                 # 确认改密
                 shell.send("y\n")
                 time.sleep(1.5)
-                output = self._wait_for_output(shell)
-                print(output)
+                output, _ = self._wait_for_output(shell)
+                logger.debug("改密确认输出:\n" + output)
 
                 # 输入旧密码
-                print("[*] 输入旧密码...")
-                logger.info("输入旧密码...")
+                logger.info("[*] 输入旧密码...")
                 shell.send(self.device.old_password + "\n")
                 time.sleep(1.5)
-                output = self._wait_for_output(shell)
-                print(output)
+                output, _ = self._wait_for_output(shell)
+                logger.debug("旧密码输入后输出:\n" + output)
 
                 # 输入新密码
-                print("[*] 输入新密码...")
-                logger.info("输入新密码...")
+                logger.info("[*] 输入新密码...")
                 shell.send(self.device.new_password + "\n")
                 time.sleep(1.5)
-                output = self._wait_for_output(shell)
-                print(output)
+                output, _ = self._wait_for_output(shell)
+                logger.debug("新密码输入后输出:\n" + output)
 
                 # 确认新密码
-                print("[*] 再次确认新密码...")
-                logger.info("再次确认新密码...")
+                logger.info("[*] 再次确认新密码...")
                 shell.send(self.device.new_password + "\n")
                 time.sleep(2)
-                output = self._wait_for_output(shell, timeout=10)
-                print(output)
+                output, _ = self._wait_for_output(shell, timeout=10)
+                logger.debug("新密码确认后输出:\n" + output)
 
                 if "changed successfully" in output.lower():
                     logger.info("密码修改成功！")
@@ -171,8 +202,7 @@ class SSHFirstConnect:
                 return self._verify_with_new_password()
 
             else:
-                print("[*] 未检测到强制改密提示，可能已经修改过密码。")
-                logger.info("未检测到强制改密提示，可能已经修改过密码。")
+                logger.info("[*] 未检测到强制改密提示，可能已经修改过密码。")
                 shell.close()
                 self.client.close()
                 return True
@@ -186,8 +216,7 @@ class SSHFirstConnect:
 
     def _verify_with_new_password(self) -> bool:
         """使用新密码重新登录验证。"""
-        print("\n=== 使用新密码重新登录验证 ===")
-        logger.info("使用新密码重新登录验证")
+        logger.info("=== 使用新密码重新登录验证 ===")
         client2 = SSHClient()
         client2.set_missing_host_key_policy(AutoAddPolicy())
 
@@ -201,16 +230,13 @@ class SSHFirstConnect:
                 look_for_keys=False,
                 allow_agent=False,
             )
-            print("[+] 使用新密码登录成功！")
-            logger.info("使用新密码登录成功！")
+            logger.info("[+] 使用新密码登录成功！")
             shell2 = client2.invoke_shell()
             time.sleep(1)
-            verify_output = self._wait_for_output(shell2, timeout=5)
-            print(verify_output)
-            logger.info(f"验证输出: {verify_output[:200]}...")
+            verify_output, _ = self._wait_for_output(shell2, timeout=5)
+            logger.debug("验证输出:\n" + verify_output)
 
-            print("\n[成功] 新密码已生效，可以正常使用。")
-            logger.info("新密码已生效，可以正常使用。")
+            logger.info("[成功] 新密码已生效，可以正常使用。")
 
             # 改密成功后自动备份配置（使用 Netmiko）
             self._backup_config_after_change(client2)
@@ -245,8 +271,7 @@ class SSHFirstConnect:
             backup_path = exporter.export_backup(
                 f"ssh-{self.device.host}", {"display current-configuration": config}
             )
-            print(f"[+] 配置备份已保存: {backup_path}")
-            logger.info(f"配置备份已保存: {backup_path}")
+            logger.info(f"[+] 配置备份已保存: {backup_path}")
             conn.disconnect()
             return True
 

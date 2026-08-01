@@ -74,13 +74,32 @@ class AgentAdapter:
                 message=f"不支持的操作: {request.action}",
             )
 
-        # 基本参数校验
-        if not request.device or not request.device.port or not request.device.password:
-            return AgentResponse(
-                success=False,
-                code=APT001.code,
-                message="缺少必要的设备连接信息 (port/password)",
-            )
+        # 检测连接类型：SSH 或 Console
+        is_ssh = request.device.is_ssh()
+
+        # 基本参数校验（根据连接类型区分）
+        if is_ssh:
+            # SSH 模式：需要 password，host 或 port 至少有一个
+            if not request.device.password:
+                return AgentResponse(
+                    success=False,
+                    code=APT001.code,
+                    message="缺少必要的设备连接信息 (password)",
+                )
+            if not (request.device.host or request.device.port):
+                return AgentResponse(
+                    success=False,
+                    code=APT001.code,
+                    message="SSH 模式需要 host 或 port",
+                )
+        else:
+            # Console 模式：需要 port 和 password
+            if not request.device.port or not request.device.password:
+                return AgentResponse(
+                    success=False,
+                    code=APT001.code,
+                    message="缺少必要的设备连接信息 (port/password)",
+                )
 
         device_name = request.variables.get("device_name", "unknown")
 
@@ -137,6 +156,11 @@ class AgentAdapter:
 
             return AgentResponse(success=True, data={"validation_report": report})
 
+        # SSH 连接分支
+        if is_ssh:
+            return self._execute_via_ssh(request, device_name)
+
+        # Console 连接分支
         try:
             # 使用上下文管理器确保自动 disconnect（即使异常也安全）
             with Connection(
@@ -189,3 +213,173 @@ class AgentAdapter:
                 message=str(e),
                 error=str(e),
             )
+
+    def _execute_via_ssh(self, request: AgentRequest, device_name: str) -> AgentResponse:
+        """
+        通过 SSH 执行 Skill 请求。
+
+        支持的操作：
+        - backup: 使用 netmiko 采集配置并备份
+        - command: 直接执行单条命令
+        - deploy: 简化支持（下发配置），完整 DeploymentEngine 需 Connection 对象
+        - validate: 不应到达此分支（已在 execute 中提前处理）
+
+        Args:
+            request: AgentRequest 对象
+            device_name: 设备名称
+
+        Returns:
+            AgentResponse: 标准化响应
+        """
+        import paramiko
+        from netmiko import ConnectHandler
+
+        host = request.device.host or request.device.port
+        port = request.device.port_number
+        username = request.device.username
+        password = request.device.password
+
+        logger.info(f"SSH 模式执行 action={request.action}，目标: {host}:{port}")
+
+        ssh_device = {
+            "device_type": "huawei_vrp",
+            "host": host,
+            "username": username,
+            "password": password,
+            "port": port,
+        }
+
+        conn = None
+        try:
+            conn = ConnectHandler(**ssh_device)
+            conn.send_command("screen-length 0 temporary")
+
+            if request.action == "command":
+                cmd = request.variables.get("command", "")
+                if not cmd:
+                    return AgentResponse(
+                        success=False,
+                        code=APT001.code,
+                        message="SSH command action 缺少 command 参数",
+                    )
+                output = conn.send_command(cmd, read_timeout=30)
+                conn.disconnect()
+                return AgentResponse(success=True, data={"output": output, "transport": "ssh"})
+
+            elif request.action == "backup":
+                from src.backup import ConfigExporter
+
+                config = conn.send_command("display current-configuration", read_timeout=120)
+                exporter = ConfigExporter()
+                path = exporter.export_backup(device_name, {"display current-configuration": config})
+                conn.disconnect()
+                return AgentResponse(
+                    success=True,
+                    data={"backup_path": str(path), "transport": "ssh"}
+                )
+
+            elif request.action == "deploy":
+                # SSH deploy 的简化实现：直接下发 template 渲染后的配置
+                # 完整功能（幂等性、Dry-Run、自动回滚）需使用 Console + DeploymentEngine
+                from src.template import TemplateRenderer
+
+                template_name = request.template or "access_switch.j2"
+                renderer = TemplateRenderer()
+                target_config = renderer.render(template_name, request.variables)
+
+                # 1. 幂等性检查：采集当前配置并比对
+                try:
+                    current_config = conn.send_command("display current-configuration", read_timeout=120)
+                except Exception as e:
+                    logger.warning(f"SSH deploy 采集当前配置失败，跳过幂等性检查: {e}")
+                    current_config = None
+
+                if current_config is not None:
+                    # 简单的配置规范化比对
+                    target_lines = [l.strip() for l in target_config.splitlines() if l.strip() and not l.strip().startswith("#")]
+                    current_lines = [l.strip() for l in current_config.splitlines() if l.strip() and not l.strip().startswith("#")]
+
+                    if target_lines == current_lines:
+                        conn.disconnect()
+                        return AgentResponse(
+                            success=True,
+                            data={
+                                "status": "skipped",
+                                "reason": "no configuration changes detected (idempotency check)",
+                                "transport": "ssh",
+                            },
+                        )
+
+                if request.dry_run:
+                    conn.disconnect()
+                    return AgentResponse(
+                        success=True,
+                        data={
+                            "status": "dry_run",
+                            "reason": "SSH deploy dry_run 模式，未下发配置",
+                            "planned_config_length": len(target_config),
+                            "transport": "ssh",
+                        },
+                    )
+
+                # 2. 下发配置：逐行发送（不使用 DeploymentEngine 的 planner）
+                lines = [l.strip() for l in target_config.splitlines() if l.strip() and not l.strip().startswith("#")]
+                success_count = 0
+                failed_lines = []
+                for line in lines:
+                    try:
+                        conn.send_command(line, read_timeout=30)
+                        success_count += 1
+                    except Exception as e:
+                        logger.warning(f"SSH deploy 命令执行失败: {line} -> {e}")
+                        failed_lines.append(line)
+
+                conn.disconnect()
+                status = "success" if not failed_lines else "partial"
+                return AgentResponse(
+                    success=True,
+                    data={
+                        "status": status,
+                        "deployed_lines": success_count,
+                        "failed_lines": failed_lines,
+                        "total_lines": len(lines),
+                        "transport": "ssh",
+                        "note": "SSH deploy 为简化实现，建议 Console 模式使用完整 DeploymentEngine（支持 planner、自动回滚）",
+                    },
+                )
+
+            else:
+                if conn:
+                    conn.disconnect()
+                return AgentResponse(
+                    success=False,
+                    code=APT002.code,
+                    message=f"SSH 模式不支持的操作: {request.action}",
+                )
+
+        except paramiko.AuthenticationException as e:
+            if conn:
+                conn.disconnect()
+            logger.error(f"SSH 认证失败: {e}")
+            return AgentResponse(
+                success=False,
+                code=CON003.code,
+                message=f"SSH 认证失败: {e}",
+                error=str(e),
+            )
+        except Exception as e:
+            if conn:
+                try:
+                    conn.disconnect()
+                except Exception as disconnect_err:
+                    logger.warning(f"SSH 连接关闭异常: {disconnect_err}")
+            if isinstance(e, (KeyboardInterrupt, SystemExit)):
+                raise
+            logger.error(f"SSH 执行失败: {e}")
+            return AgentResponse(
+                success=False,
+                code=CON003.code,
+                message=str(e),
+                error=str(e),
+            )
+
