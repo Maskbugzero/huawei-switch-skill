@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
 """
-Skill Example 05: SSH 首次连接 + 强制修改密码
+Skill Example 05: SSH 首次连接 + 强制修改密码（特殊场景）
 
-展示如何使用 Skill 处理交换机首次 SSH 登录强制改密场景。
+本示例展示如何处理交换机首次 SSH 登录时强制修改密码的场景。
+属于进阶/特殊能力示例，目前不通过 AgentAdapter 调用。
+
+注意：大多数场景推荐使用 Console + AgentAdapter（见其他示例）。
 """
 
 from src.ssh.first_connect import SSHFirstConnect, SSHDevice

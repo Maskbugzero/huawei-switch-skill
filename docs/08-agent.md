@@ -1,5 +1,7 @@
 # 08 - Agent 统一适配层
 
+> **注意**：请使用项目 `.venv` 虚拟环境运行本模块（详见 `SKILL.md`）。
+
 ## 目标
 提供单一调用入口（AgentAdapter），编排 Console、Backup、Deploy、Command 等模块，实现完整自动化流程。
 
