@@ -1,0 +1,73 @@
+# .gitattributes
+# 统一换行符和文件处理规则
+
+# 自动处理文本文件换行符（推荐现代写法）
+* text=auto
+
+# ====================
+# 强制使用 LF 的文件
+# ====================
+
+# Python 源文件
+*.py text eol=lf
+
+# 配置文件
+*.ini text eol=lf
+*.cfg text eol=lf
+*.toml text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.json text eol=lf
+
+# Markdown 和文档
+*.md text eol=lf
+*.rst text eol=lf
+
+# Shell / Bash 脚本（必须 LF，否则在 Linux 上无法执行）
+*.sh text eol=lf
+
+# PowerShell 脚本（建议也用 LF）
+*.ps1 text eol=lf
+
+# Git 相关文件
+.gitattributes text eol=lf
+.gitignore text eol=lf
+
+# ====================
+# 二进制文件（不转换换行符）
+# ====================
+
+# 图片
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.svg binary
+
+# 字体
+*.ttf binary
+*.otf binary
+
+# 压缩包
+*.zip binary
+*.tar binary
+*.gz binary
+*.7z binary
+
+# 其他二进制
+*.pyc binary
+*.pyo binary
+*.pyd binary
+*.so binary
+*.dll binary
+*.exe binary
+
+# ====================
+# 特殊处理
+# ====================
+
+# 虚拟环境和缓存目录（不跟踪）
+.venv/** binary
+__pycache__/** binary
+.pytest_cache/** binary

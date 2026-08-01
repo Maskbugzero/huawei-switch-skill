@@ -1,0 +1,64 @@
+{# 华为汇聚/分布层交换机模板 #}
+{# 适用于汇聚层，包含链路聚合、大二层、流量监控、QoS #}
+
+system-view
+sysname {{ hostname | default('Agg-SW') }}
+
+{# 基础配置 #}
+clock timezone China-Standard-Time add 08:00:00
+telnet server enable
+undo http server enable
+
+aaa
+ local-user admin password irreversible-cipher {{ admin_password | default('Agg@2026') }}
+ local-user admin privilege level 15
+ local-user admin service-type ssh telnet
+ quit
+
+{# VLAN 配置 #}
+vlan batch {{ vlan_list | default('10 20 30 40 100 200') }}
+
+{# 管理 VLAN #}
+interface Vlanif100
+ ip address {{ mgmt_ip | default('10.100.100.1') }} {{ mgmt_mask | default('255.255.255.0') }}
+ undo shutdown
+
+{# 下行接入链路（连接多个 Access Switch） #}
+interface {{ downlink1 | default('Eth-Trunk10') }}
+ description ## Downlink to Access Layer - Group A ##
+ port link-type trunk
+ port trunk allow-pass vlan {{ downlink_vlans | default('10 20 30 40 100') }}
+ undo shutdown
+
+interface {{ downlink2 | default('Eth-Trunk11') }}
+ description ## Downlink to Access Layer - Group B ##
+ port link-type trunk
+ port trunk allow-pass vlan {{ downlink_vlans | default('10 20 30 40 100') }}
+ undo shutdown
+
+{# 上行核心链路 #}
+interface {{ uplink | default('Eth-Trunk1') }}
+ description ## Uplink to Core Layer ##
+ port link-type trunk
+ port trunk allow-pass vlan {{ uplink_vlans | default('10 20 30 100 200') }}
+ undo shutdown
+
+{# 链路聚合配置示例 #}
+interface Eth-Trunk10
+ description ## LACP to Access Switches ##
+ mode lacp-static
+ lacp timeout slow
+
+{# 流量监控与 QoS #}
+traffic classifier c1 operator and
+ if-match acl 3000
+traffic behavior b1
+ car cir {{ cir | default('100000') }} cbs {{ cbs | default('2000000') }} pir {{ pir | default('200000') }}
+traffic policy p1
+ classifier c1 behavior b1
+
+{# 端口镜像（用于流量分析） #}
+observe-port 1 interface {{ monitor | default('GigabitEthernet0/0/48') }}
+
+{# 完成 #}
+return

@@ -1,0 +1,56 @@
+{# 华为企业接入交换机模板 #}
+{# 适用于办公/楼层接入，强调端口安全、VLAN 隔离、PoE #}
+
+system-view
+sysname {{ hostname | default('Access-SW') }}
+
+{# 基础配置 #}
+undo telnet server enable
+ssh server enable
+aaa
+ local-user admin password irreversible-cipher {{ admin_password | default('Access@2026') }}
+ local-user admin privilege level 15
+ local-user admin service-type ssh
+ quit
+
+{# VLAN 配置 #}
+vlan batch {{ vlan_list | default('10 20 30 100') }}
+
+{# 管理 VLAN #}
+interface Vlanif100
+ description ## Management VLAN ##
+ ip address {{ mgmt_ip | default('192.168.100.10') }} {{ mgmt_mask | default('255.255.255.0') }}
+ undo shutdown
+
+{# 上行链路（通常连接汇聚/核心） #}
+interface {{ uplink | default('Eth-Trunk1') }}
+ description ## Uplink to Aggregation ##
+ port link-type trunk
+ port trunk allow-pass vlan {{ uplink_vlans | default('10 20 30 100') }}
+ undo shutdown
+
+{# 接入端口模板（24口示例） #}
+{% for i in range(1, 25) %}
+interface GigabitEthernet0/0/{{ i }}
+ description ## Access Port - Floor {{ floor | default('1') }} Room {{ room | default('01') }} PC-{{ i }} ##
+ port link-type access
+ port default vlan {{ access_vlan | default('20') }}
+{# 端口安全 #}
+ port-security enable
+ port-security max-mac-num {{ max_mac | default('2') }}
+ port-security mac-address sticky
+{# PoE（如果支持） #}
+ undo poe power-off
+ undo shutdown
+{% endfor %}
+
+{# DHCP Snooping 防欺骗 #}
+dhcp snooping enable
+dhcp snooping trusted interface {{ uplink | default('Eth-Trunk1') }}
+
+{# 端口镜像（可选，用于监控） #}
+observe-port 1 interface {{ monitor_port | default('GigabitEthernet0/0/25') }}
+
+
+{# 完成 #}
+return

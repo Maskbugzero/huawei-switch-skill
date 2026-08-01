@@ -1,0 +1,72 @@
+{# 华为三层核心交换机模板 #}
+{# 适用于核心层，包含路由、OSPF、VRRP、高可靠性配置 #}
+
+system-view
+sysname {{ hostname | default('Core-SW') }}
+
+{# 基础管理配置 #}
+clock timezone China-Standard-Time add 08:00:00
+clock datetime {{ current_time | default('2026-07-31 10:00:00') }}
+telnet server enable
+undo telnet server authentication
+undo http server enable
+undo https server enable
+
+{# 用户管理 #}
+aaa
+ local-user admin password irreversible-cipher {{ admin_password | default('Admin@2026') }}
+ local-user admin privilege level 15
+ local-user admin service-type ssh telnet
+ quit
+
+{# 接口配置 - 上行链路 #}
+interface {{ uplink1 | default('Eth-Trunk1') }}
+ description ## Uplink to ISP/Core ##
+ port link-type trunk
+ port trunk allow-pass vlan {{ uplink_vlans | default('10 20 30 100') }}
+ undo shutdown
+
+interface {{ uplink2 | default('Eth-Trunk2') }}
+ description ## Uplink to Backup Core ##
+ port link-type trunk
+ port trunk allow-pass vlan {{ uplink_vlans | default('10 20 30 100') }}
+ undo shutdown
+
+{# VLAN 配置 #}
+vlan batch {{ vlan_list | default('10 20 30 100 200') }}
+
+{# 三层接口示例 #}
+interface Vlanif10
+ description ## Management VLAN ##
+ ip address {{ mgmt_ip | default('10.10.10.1') }} {{ mgmt_mask | default('255.255.255.0') }}
+ undo shutdown
+
+interface Vlanif20
+ description ## Server VLAN ##
+ ip address {{ server_ip | default('10.20.20.1') }} {{ server_mask | default('255.255.255.0') }}
+ undo shutdown
+
+{# OSPF 路由配置 #}
+ospf {{ ospf_process | default('1') }} router-id {{ router_id | default('1.1.1.1') }}
+ area 0.0.0.0
+  network {{ mgmt_network | default('10.10.10.0') }} {{ mgmt_wildcard | default('0.0.0.255') }}
+  network {{ server_network | default('10.20.20.0') }} {{ server_wildcard | default('0.0.0.255') }}
+ quit
+
+{# VRRP 高可用（双核心场景） #}
+interface Vlanif10
+ vrrp vrid {{ vrrp_id | default('10') }} virtual-ip {{ vrrp_vip | default('10.10.10.254') }}
+ vrrp vrid {{ vrrp_id | default('10') }} priority {{ vrrp_priority | default('110') }}
+ vrrp vrid {{ vrrp_id | default('10') }} preempt-mode timer delay {{ vrrp_delay | default('30') }}
+ quit
+
+{# 安全与监控 #}
+undo info-center enable
+info-center loghost {{ log_server | default('10.10.10.100') }}
+snmp-agent
+snmp-agent community read {{ snmp_community | default('public') }}
+snmp-agent sys-info contact {{ contact | default('Network Team') }}
+snmp-agent sys-info location {{ location | default('DataCenter-Core') }}
+
+{# 完成 #}
+return
