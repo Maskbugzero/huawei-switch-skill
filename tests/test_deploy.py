@@ -62,6 +62,8 @@ def test_deploy_failure_with_auto_rollback():
         assert report["status"] == "failed"
         assert "rollback" in report
         assert report["rollback"]["attempted"] is True
+        assert "success_count" in report["rollback"]
+        assert "failed_count" in report["rollback"]
 
 
 def test_deploy_failure_without_auto_rollback():
@@ -69,14 +71,18 @@ def test_deploy_failure_without_auto_rollback():
     engine = DeploymentEngine()
     mock_conn = MagicMock()
 
-    call_count = [0]
+    # 使用一个更稳定的方式：通过 backup_path 是否存在来判断阶段
+    backup_done = [False]
 
     def send_side_effect(cmd, timeout=None):
-        call_count[0] += 1
-        # 备份阶段（第1次大配置采集）成功，部署阶段失败
-        if call_count[0] > 5:   # 假设备份后第6次开始是部署
+        if not backup_done[0]:
+            # 备份阶段（采集 current-configuration）成功
+            if "current-configuration" in cmd:
+                backup_done[0] = True
+            return None
+        else:
+            # 部署阶段失败
             raise Exception("部署失败")
-        return None
 
     mock_conn.send_command.side_effect = send_side_effect
 

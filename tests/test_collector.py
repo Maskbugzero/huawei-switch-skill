@@ -16,8 +16,10 @@ def test_collect_all_basic():
     collector = ConfigCollector(mock_conn, disable_pagination=False)
     results = collector.collect_all()
 
-    assert len(results) > 0
-    assert "display current-configuration" in results
+    # 验证是否调用了关键命令
+    called_commands = [call[0][0] for call in mock_conn.send_command.call_args_list]
+    assert "display current-configuration" in called_commands
+    assert len(results) >= 6  # 至少包含标准采集命令
 
 
 def test_collect_current_config():
@@ -52,5 +54,6 @@ def test_collect_with_error():
     collector = ConfigCollector(mock_conn, disable_pagination=False)
     results = collector.collect_all()
 
-    # 即使失败也应该返回结果，且包含 ERROR 标记
-    assert any("ERROR" in str(v) for v in results.values())
+    # 验证失败的命令返回了错误信息
+    current_config_result = results.get("display current-configuration", "")
+    assert "ERROR" in str(current_config_result)
