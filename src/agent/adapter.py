@@ -86,7 +86,10 @@ class AgentAdapter:
 
         # validate 不需要真实连接，可提前处理
         if request.action == "validate":
+            from pathlib import Path
+
             from src.verify import ConfigVerifier
+
             verifier = ConfigVerifier()
 
             before = request.variables.get("before_config", "")
@@ -96,12 +99,36 @@ class AgentAdapter:
             before_path = request.variables.get("before_config_path")
             after_path = request.variables.get("after_config_path")
 
-            if before_path:
-                with open(before_path, "r", encoding="utf-8") as f:
-                    before = f.read()
-            if after_path:
-                with open(after_path, "r", encoding="utf-8") as f:
-                    after = f.read()
+            def _safe_read_config(path_str: str) -> str:
+                """安全读取配置文件，防止路径遍历等安全问题。"""
+                p = Path(path_str).resolve()
+                # 限制只能读取当前工作目录下的文件，或 backups/ 目录下的文件
+                cwd = Path.cwd().resolve()
+                allowed_dirs = [cwd, cwd / "backups"]
+
+                is_allowed = any(
+                    str(p).startswith(str(d)) for d in allowed_dirs
+                )
+
+                if not p.exists() or not p.is_file():
+                    raise FileNotFoundError(f"配置文件不存在或不是文件: {path_str}")
+                if not is_allowed:
+                    raise PermissionError(f"不允许访问该路径: {path_str}")
+
+                with open(p, "r", encoding="utf-8") as f:
+                    return f.read()
+
+            try:
+                if before_path:
+                    before = _safe_read_config(before_path)
+                if after_path:
+                    after = _safe_read_config(after_path)
+            except Exception as e:
+                return AgentResponse(
+                    success=False,
+                    code=APT001.code,
+                    message=f"配置文件读取失败: {e}",
+                )
 
             if before or after:
                 report = verifier.verify(before, after, expected)

@@ -38,28 +38,6 @@ def cmd_backup(args):
         sys.exit(1)
 
 
-
-def cmd_deploy(args):
-    """执行配置部署（已弃用，推荐使用 AgentAdapter）"""
-    print("⚠️  警告：deploy 子命令已弃用！")
-    print("推荐使用 AgentAdapter（Skill 统一入口）：")
-    print("""
-from src.agent import AgentAdapter, AgentRequest, DeviceInfo
-
-adapter = AgentAdapter()
-request = AgentRequest(
-    action="deploy",
-    device=DeviceInfo(port="COM4", password="xxx"),
-    template="access_switch.j2",           # 或其他模板
-    variables={"hostname": "SW-01", ...},
-    backup=True
-)
-response = adapter.execute(request)
-""")
-    print("详细用法请参考 README.md 和 examples/03_using_agent_adapter.py")
-    sys.exit(0)
-
-
 def main():
     parser = argparse.ArgumentParser(description="Huawei Switch Skill")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -76,21 +54,6 @@ def main():
     p_backup.add_argument("--password", required=True, help="Console 密码")
     p_backup.add_argument("--device", required=True, help="设备名称")
     p_backup.set_defaults(func=cmd_backup)
-
-
-    # deploy 子命令（已弃用，推荐使用 AgentAdapter）
-    p_deploy = subparsers.add_parser(
-        "deploy",
-        help="【已弃用】部署配置到交换机 - 推荐使用 AgentAdapter"
-    )
-    p_deploy.add_argument("--script", choices=["admin", "poe"], required=False, help="（已弃用）部署脚本类型")
-    p_deploy.add_argument("--port", default="COM4", help="串口号")
-    p_deploy.add_argument("--password", "-p", required=False, help="Console 密码")
-    p_deploy.add_argument("--config-dir", default=".", help="配置目录")
-    p_deploy.add_argument("--config-file", "-c", default="config.txt", help="配置文件名")
-    p_deploy.add_argument("--device-name", required=False, help="设备名称")
-    p_deploy.add_argument("--no-backup", action="store_true", help="跳过备份")
-    p_deploy.set_defaults(func=cmd_deploy)
 
     args = parser.parse_args()
     args.func(args)

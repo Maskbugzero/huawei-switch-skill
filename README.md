@@ -129,15 +129,26 @@ huawei-switch-skill/
 
 项目已添加基础 Mock 测试，支持在无硬件环境下进行单元测试。
 
+**重要**：本项目使用 `.venv` 虚拟环境，建议优先使用项目内的 Python 解释器运行命令。
+
 ```bash
-# 安装测试依赖
-pip install -r requirements.txt
+# 推荐方式（直接使用项目 venv）
+.\.venv\Scripts\python.exe -m pytest tests/ -v
+
+# 或者先激活虚拟环境
+.\.venv\Scripts\Activate.ps1
+python -m pytest tests/ -v
+```
+
+```bash
+# 安装测试依赖（首次使用时）
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
 
 # 运行所有测试
-python -m pytest tests/ -v
+.\.venv\Scripts\python.exe -m pytest tests/ -v
 
 # 只运行 Console 模块测试
-python -m pytest tests/test_console.py -v
+.\.venv\Scripts\python.exe -m pytest tests/test_console.py -v
 ```
 
 目前已覆盖：

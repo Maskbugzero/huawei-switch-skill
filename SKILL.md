@@ -47,6 +47,37 @@ dependencies:
 related_skills: []
 ---
 
+# 虚拟环境要求（重要）
+
+本 Skill **必须**使用项目自带的虚拟环境，以保证依赖隔离和可复现性。
+
+**执行规则**：
+
+1. 所有 Python 命令**必须**通过项目内的 `.venv` 执行
+2. 如果 `.venv` 不存在，**必须先创建**再使用
+3. 禁止直接使用系统全局 Python（`python` / `python3`）
+
+**推荐命令格式**：
+
+```powershell
+# Windows（推荐直接调用）
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe main.py backup --port COM4 --password xxx --device SW-01
+
+# 或者激活后使用
+.\.venv\Scripts\Activate.ps1
+python -m pytest tests/ -v
+```
+
+**创建虚拟环境（如果不存在）**：
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+```
+
+---
+
 # Huawei Switch Skill
 
 基于 Python 的华为交换机 Console 自动化 Skill，支持从连接、备份、解析、模板渲染、部署到校验的完整配置生命周期管理。

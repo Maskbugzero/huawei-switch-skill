@@ -4,6 +4,29 @@
 
 它封装了从串口连接、命令执行、配置备份、解析、模板渲染、部署到校验的完整生命周期能力，可被 Claude Code、Hermes 或其他上层 Agent 系统直接调用。
 
+## 环境要求（重要）
+
+本项目**必须**使用自带的虚拟环境 `.venv`，以确保依赖隔离。
+
+**规则**：
+- 所有 Python 命令必须通过 `.venv` 执行
+- 如果 `.venv` 不存在，需先创建再使用
+- 禁止直接使用系统全局 Python
+
+**常用命令**：
+
+```powershell
+# 直接调用 venv 内的 Python（推荐）
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe -m pytest tests/ -v
+
+# 激活虚拟环境后使用
+.\.venv\Scripts\Activate.ps1
+python main.py backup --port COM4 --password xxx --device SW-01
+```
+
+---
+
 ## 核心定位
 
 - **Skill 而非 Agent**：提供标准化能力封装，供上层 Agent 调用

@@ -2,6 +2,27 @@
 
 本指南详细说明如何在 Claude Code、Hermes 或自定义 Agent 系统中正确调用 `huawei-switch-skill` Skill。
 
+## 环境要求（重要）
+
+使用本 Skill 时，**必须**通过项目自带的 `.venv` 虚拟环境执行所有 Python 命令。
+
+**规则**：
+- 如果 `.venv` 不存在，需先创建
+- 所有命令使用 `.venv\Scripts\python.exe`（Windows）或等效路径
+- 禁止直接使用系统全局 `python`
+
+**示例**：
+
+```powershell
+# 安装依赖
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+
+# 运行测试
+.\.venv\Scripts\python.exe -m pytest tests/ -v
+```
+
+---
+
 ## 1. Skill 概述
 
 `huawei-switch-skill` 是一个专注于华为 VRP 交换机的 **Console 优先** 自动化 Skill，提供从连接到部署的全生命周期能力。
