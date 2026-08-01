@@ -101,7 +101,7 @@ python -m venv .venv
 | 配置备份与归档        | `backup`          | 按时间戳目录结构化存储            |
 | 配置解析              | `parser`          | 转换为结构化 Python 对象          |
 | 模板渲染              | `template`        | Jinja2 + YAML 变量                |
-| 自动部署 + 回滚       | `deploy`          | 预检查、失败回滚                  |
+| 自动部署 + 回滚       | `deploy`          | 预检查、失败回滚、**幂等部署 + Dry-Run 支持**、部署步骤规划器（`DeploymentPlanner`）、危险命令检测 |
 | 配置一致性校验        | `verify`          | 生成 HTML/Markdown 报告           |
 | SSH 首次改密          | `ssh`             | 首次连接强制修改密码              |
 
@@ -209,6 +209,7 @@ response = adapter.execute(request)
 **改进说明**：
 - 内部使用 `with Connection(...) as conn:` 上下文管理器，彻底解决资源泄漏问题。
 - 错误处理已优化，支持更具体的异常捕获与日志记录。
+- **AgentRequest 已迁移至 Pydantic 模型**，支持自动 JSON Schema 生成，更适合 LLM Tool Calling。
 
 ### 3. 其他常用类
 
@@ -217,6 +218,51 @@ response = adapter.execute(request)
 - `DeploymentEngine`
 - `ConfigParser`（多子解析器）
 - `TemplateRenderer`
+
+## 幂等部署与 Dry-Run 支持（重要新特性）
+
+从 2026-08 版本开始，`DeploymentEngine` 和 `AgentAdapter` 正式支持**幂等性部署**和 **Dry-Run 模式**，这是企业级网络自动化 Skill 的核心能力。
+
+### 行为说明
+
+| 场景                     | 返回 status     | 说明                                      | 是否执行命令 |
+|--------------------------|-----------------|-------------------------------------------|--------------|
+| 配置有差异               | `success`       | 正常下发配置                              | 是           |
+| 配置无差异               | `skipped`       | 检测到当前配置与目标一致，自动跳过        | 否           |
+| `dry_run=True`           | `dry_run`       | 仅模拟执行，不下发任何命令                | 否           |
+| 部署失败                 | `failed`        | 执行失败，可触发自动回滚                  | 部分执行     |
+
+### 使用示例（推荐通过 AgentAdapter）
+
+```python
+from src.agent import AgentAdapter, AgentRequest, DeviceInfo
+
+adapter = AgentAdapter()
+
+# Dry-Run 模式（强烈推荐在生产环境使用）
+request = AgentRequest(
+    action="deploy",
+    device=DeviceInfo(port="COM4", password="xxx"),
+    template="access_switch.j2",
+    variables={"hostname": "SW-01", "vlan_list": "10 20 30"},
+    backup=True,
+    dry_run=True          # 关键参数
+)
+response = adapter.execute(request)
+
+if response.data.get("status") == "skipped":
+    print("配置无变化，无需部署")
+elif response.data.get("status") == "dry_run":
+    print("Dry-Run 完成，可安全执行真实部署")
+```
+
+### 设计优势
+
+- **幂等性保护**：即使 Agent 重复调用同一部署请求，也不会造成重复配置或网络抖动。
+- **安全验证**：通过 `dry_run=True` 可先观察将要执行的变更，再决定是否真正下发。
+- **丰富反馈**：响应中包含 `reason`、`steps`、`changes_detected` 等字段，便于上层 Agent 决策。
+
+---
 
 ## 配置说明
 

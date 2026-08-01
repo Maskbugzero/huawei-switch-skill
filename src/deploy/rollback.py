@@ -5,9 +5,10 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List
+
+from pydantic import BaseModel, ConfigDict, Field
 
 from src.console import Connection
 from src.console.logger import get_logger
@@ -15,15 +16,16 @@ from src.console.logger import get_logger
 logger = get_logger("deploy.rollback")
 
 
-@dataclass
-class RollbackReport:
+class RollbackReport(BaseModel):
     """回滚执行报告。"""
-    success: bool
-    success_count: int = 0
-    failed_count: int = 0
-    errors: List[str] = field(default_factory=list)
-    backup_path: str = ""
-    dry_run: bool = False
+    model_config = ConfigDict(extra="ignore")
+
+    success: bool = Field(..., description="Whether rollback succeeded")
+    success_count: int = Field(default=0, description="Number of successful commands")
+    failed_count: int = Field(default=0, description="Number of failed commands")
+    errors: List[str] = Field(default_factory=list, description="List of error messages")
+    backup_path: str = Field(default="", description="Path to the backup used for rollback")
+    dry_run: bool = Field(default=False, description="Whether this was a dry-run rollback")
 
     def summary(self) -> str:
         status = "【Dry Run】" if self.dry_run else ""

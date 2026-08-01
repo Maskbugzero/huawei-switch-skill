@@ -160,6 +160,7 @@ class AgentAdapter:
                         variables=request.variables,
                         backup=request.backup,
                         device_name=device_name,
+                        dry_run=request.dry_run,
                     )
                     return AgentResponse(success=True, data=report)
 
@@ -170,7 +171,17 @@ class AgentAdapter:
                 # 理论上不会到达这里
                 return AgentResponse(success=True)
 
+        except (ConsoleDisconnect, ConsoleTimeout, AuthenticationError) as e:
+            logger.error(f"Agent 执行失败（连接异常）: {e}")
+            return AgentResponse(
+                success=False,
+                code=CON003.code,
+                message=str(e),
+                error=str(e),
+            )
         except Exception as e:
+            if isinstance(e, (KeyboardInterrupt, SystemExit)):
+                raise
             logger.error(f"Agent 执行失败: {e}")
             return AgentResponse(
                 success=False,

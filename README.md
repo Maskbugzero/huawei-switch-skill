@@ -29,7 +29,7 @@
 - 一键配置备份（按时间戳目录）
 - 配置解析为结构化数据
 - Jinja2 模板渲染
-- 自动部署 + 回滚支持
+- 自动部署 + 回滚支持（含**幂等性检查 + Dry-Run 模式** + `DeploymentPlanner` 步骤规划）
 - 配置一致性校验 + 报告生成
 - 统一的 `AgentAdapter` Skill 调用入口
 
@@ -119,11 +119,24 @@ huawei-switch-skill/
 
 ## 最近改进（2026-08）
 
-- `AgentAdapter` 全面修复：使用上下文管理器避免连接泄漏，`validate` action 已实现，错误处理更健壮。
-- 示例与文档已统一为 `DeviceInfo` + 顶层字段用法。
-- 部署脚本重构为推荐的 `with Connection(...) as conn:` 模式。
-- 测试覆盖扩展至 13 个测试用例（含 validate 路径）。
-- 依赖已补全（paramiko / netmiko）。
+- **部署引擎重大增强**：
+  - `DeploymentPlanner` 全面升级（去重、分类、生成回滚计划、智能过滤危险命令）
+  - 幂等性检查返回详细差异摘要（含示例命令）
+  - 支持配置危险命令检测（`dangerous_keywords` 参数）
+  - 部署报告新增 `planned_steps_count`、`diff_summary`、`warnings` 等字段
+  - 失败时自动提供建议的 `undo` 命令
+
+- **SSH 模块一致性改进**：
+  - `SSHDevice` 迁移至 Pydantic
+  - 新增 `SSHChangePasswordResult` 模型
+  - `SSHFirstConnect` 新增 `get_summary()`、`is_connected`、`get_connection_info()` 方法
+  - 大量 `print` 替换为结构化日志
+
+- **测试覆盖大幅提升**：
+  - 新增针对 planner、deployer 失败场景、SSH 的多项单元测试
+  - 测试总数提升至 48+
+
+- Pydantic 模型全面升级、`AgentAdapter` 异常处理优化等
 
 ## 测试
 

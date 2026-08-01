@@ -6,7 +6,8 @@ Skill Example 03: 使用 AgentAdapter 统一调用（推荐方式）
 这是 Skill 被上层 Agent 系统调用的推荐方式。
 
 更新说明：
-- 已迁移至 DeviceInfo + 顶层字段的现代用法
+- 已迁移至 DeviceInfo + 顶层字段的现代用法（Pydantic 模型）
+- 支持 dry_run 模式和幂等性部署
 - 内部使用上下文管理器，资源安全
 - 支持 validate action
 """
@@ -29,8 +30,8 @@ def main():
     backup_response = adapter.execute(backup_request)
     print(f"备份结果: {backup_response}")
 
-    # 示例2: 执行部署
-    print("\n[2] 执行部署操作")
+    # 示例2: 执行部署（正常模式）
+    print("\n[2] 执行部署操作（正常模式）")
     deploy_request = AgentRequest(
         action="deploy",
         device=DeviceInfo(port="COM4", password="your_password"),
@@ -45,6 +46,25 @@ def main():
     )
     deploy_response = adapter.execute(deploy_request)
     print(f"部署结果: {deploy_response}")
+
+    # 示例2b: Dry-Run 模式（推荐用于生产前验证）
+    print("\n[2b] Dry-Run 部署（仅模拟，不实际下发）")
+    dry_run_request = AgentRequest(
+        action="deploy",
+        device=DeviceInfo(port="COM4", password="your_password"),
+        template="access_switch.j2",
+        variables={
+            "hostname": "SW-01",
+            "vlan_list": "10 20 30",
+            "management_ip": "192.168.1.10",
+            "device_name": "SW-01"
+        },
+        backup=True,
+        dry_run=True
+    )
+    dry_run_response = adapter.execute(dry_run_request)
+    print(f"Dry-Run 结果: {dry_run_response}")
+    # 预期返回 status="dry_run" 或 "skipped"（如果配置无差异）
 
     # 示例3: 执行单条命令
     print("\n[3] 执行单条命令")

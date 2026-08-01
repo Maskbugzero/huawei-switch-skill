@@ -12,35 +12,66 @@ SSH 首次连接 + 强制修改密码模块。
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass
 from typing import Optional
 
 import paramiko
 from paramiko import SSHClient, AutoAddPolicy
 from netmiko import ConnectHandler
+from pydantic import BaseModel, ConfigDict, Field
 
 from src.console.logger import get_logger
 
 logger = get_logger("ssh.first_connect")
 
 
-@dataclass
-class SSHDevice:
+class SSHChangePasswordResult(BaseModel):
+    """SSH 改密结果。"""
+    model_config = ConfigDict(extra="ignore")
+
+    success: bool = Field(..., description="Whether password change succeeded")
+    message: str = Field(default="", description="Result message")
+    backup_path: Optional[str] = Field(default=None, description="Path to config backup if successful")
+
+
+class SSHDevice(BaseModel):
     """SSH 设备连接信息。"""
-    host: str
-    username: str = "admin"
-    old_password: str = ""
-    new_password: str = ""
-    port: int = 22
+    model_config = ConfigDict(extra="ignore")
+
+    host: str = Field(..., description="SSH host address")
+    username: str = Field(default="admin", description="SSH username")
+    old_password: str = Field(default="", description="Old password for first connect")
+    new_password: str = Field(default="", description="New password to set")
+    port: int = Field(default=22, description="SSH port")
 
 
 class SSHFirstConnect:
-    """SSH 首次连接 + 强制改密工具。"""
+    """SSH 首次连接 + 强制改密工具。
+
+    返回值推荐使用 SSHChangePasswordResult 模型。
+    """
 
     def __init__(self, device: SSHDevice, timeout: int = 15):
         self.device = device
         self.timeout = timeout
         self.client: Optional[SSHClient] = None
+
+    @property
+    def is_connected(self) -> bool:
+        """检查是否已连接。"""
+        return self.client is not None and self.client.get_transport() is not None and self.client.get_transport().is_active()
+
+    def get_connection_info(self) -> dict:
+        """返回连接信息摘要。"""
+        return {
+            "host": self.device.host,
+            "port": self.device.port,
+            "username": self.device.username,
+            "connected": self.is_connected
+        }
+
+    def get_summary(self) -> str:
+        """返回操作摘要。"""
+        return f"SSHFirstConnect for {self.device.host}:{self.device.port}"
 
     def _wait_for_output(self, shell, timeout: int = 8) -> str:
         """等待 shell 输出直到出现提示符。"""
@@ -66,7 +97,7 @@ class SSHFirstConnect:
         """
         print(f"\n=== 连接交换机 {self.device.host} ===")
         print(f"用户名: {self.device.username}")
-        logger.debug("初始密码和新密码已设置（已掩码，不在日志中明文显示）\n")
+        logger.info(f"开始 SSH 首次连接改密流程: {self.device.host}")
 
         self.client = SSHClient()
         self.client.set_missing_host_key_policy(AutoAddPolicy())
@@ -83,6 +114,7 @@ class SSHFirstConnect:
                 allow_agent=False,
             )
             print("[+] 第一次 SSH 连接成功")
+            logger.info("第一次 SSH 连接成功")
 
             shell = self.client.invoke_shell()
             shell.settimeout(20)
@@ -90,6 +122,7 @@ class SSHFirstConnect:
 
             initial_output = self._wait_for_output(shell, timeout=6)
             print("[*] 初始输出:\n" + initial_output)
+            logger.info(f"初始输出: {initial_output[:200]}...")
 
             # 判断是否进入改密流程
             if "The password needs to be changed" in initial_output or "Continue? [Y/N]" in initial_output:
@@ -103,6 +136,7 @@ class SSHFirstConnect:
 
                 # 输入旧密码
                 print("[*] 输入旧密码...")
+                logger.info("输入旧密码...")
                 shell.send(self.device.old_password + "\n")
                 time.sleep(1.5)
                 output = self._wait_for_output(shell)
@@ -110,7 +144,7 @@ class SSHFirstConnect:
 
                 # 输入新密码
                 print("[*] 输入新密码...")
-                logger.debug("新密码已发送（已掩码）")
+                logger.info("输入新密码...")
                 shell.send(self.device.new_password + "\n")
                 time.sleep(1.5)
                 output = self._wait_for_output(shell)
@@ -118,15 +152,16 @@ class SSHFirstConnect:
 
                 # 确认新密码
                 print("[*] 再次确认新密码...")
+                logger.info("再次确认新密码...")
                 shell.send(self.device.new_password + "\n")
                 time.sleep(2)
                 output = self._wait_for_output(shell, timeout=10)
                 print(output)
 
                 if "changed successfully" in output.lower():
-                    print("\n[+] 密码修改成功！")
+                    logger.info("密码修改成功！")
                 else:
-                    print("\n[-] 密码修改可能未成功，请检查输出。")
+                    logger.warning("密码修改可能未成功，请检查输出。")
 
                 shell.close()
                 self.client.close()
@@ -137,6 +172,7 @@ class SSHFirstConnect:
 
             else:
                 print("[*] 未检测到强制改密提示，可能已经修改过密码。")
+                logger.info("未检测到强制改密提示，可能已经修改过密码。")
                 shell.close()
                 self.client.close()
                 return True
@@ -151,6 +187,7 @@ class SSHFirstConnect:
     def _verify_with_new_password(self) -> bool:
         """使用新密码重新登录验证。"""
         print("\n=== 使用新密码重新登录验证 ===")
+        logger.info("使用新密码重新登录验证")
         client2 = SSHClient()
         client2.set_missing_host_key_policy(AutoAddPolicy())
 
@@ -165,12 +202,15 @@ class SSHFirstConnect:
                 allow_agent=False,
             )
             print("[+] 使用新密码登录成功！")
+            logger.info("使用新密码登录成功！")
             shell2 = client2.invoke_shell()
             time.sleep(1)
             verify_output = self._wait_for_output(shell2, timeout=5)
             print(verify_output)
+            logger.info(f"验证输出: {verify_output[:200]}...")
 
             print("\n[成功] 新密码已生效，可以正常使用。")
+            logger.info("新密码已生效，可以正常使用。")
 
             # 改密成功后自动备份配置（使用 Netmiko）
             self._backup_config_after_change(client2)
@@ -206,6 +246,7 @@ class SSHFirstConnect:
                 f"ssh-{self.device.host}", {"display current-configuration": config}
             )
             print(f"[+] 配置备份已保存: {backup_path}")
+            logger.info(f"配置备份已保存: {backup_path}")
             conn.disconnect()
             return True
 
