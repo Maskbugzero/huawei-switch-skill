@@ -1,29 +1,33 @@
 #!/usr/bin/env python3
 """
-Skill Example 02: 一键配置备份
+Skill Example 02: 一键配置备份（推荐使用 AgentAdapter）
 
-展示如何使用 Skill 进行配置备份和归档。
+展示如何通过 Skill 的统一入口 AgentAdapter 执行配置备份。
 """
 
-from src.console import Connection
-from src.backup import ConfigCollector, ConfigExporter
+from src.agent import AgentAdapter, AgentRequest, DeviceInfo
+
 
 def main():
-    print("=== Skill Example: 配置备份 ===")
+    print("=== Skill Example: 通过 AgentAdapter 执行配置备份 ===")
 
-    device_name = "SW-01"
+    adapter = AgentAdapter()
 
-    with Connection(port="COM4", password="your_password") as conn:
-        # 采集配置
-        collector = ConfigCollector(conn)
-        config_data = collector.collect_all()
+    request = AgentRequest(
+        action="backup",
+        device=DeviceInfo(port="COM4", password="your_password"),
+        variables={"device_name": "SW-01"}
+    )
 
-        # 导出备份
-        exporter = ConfigExporter()
-        backup_path = exporter.export_backup(device_name, config_data)
+    response = adapter.execute(request)
 
-        print(f"备份完成！保存路径: {backup_path}")
-        print("包含文件：current-configuration.txt、version.txt、vlan.txt 等")
+    if response.success:
+        print("备份成功！")
+        print("备份路径:", response.data.get("backup_path"))
+    else:
+        print("备份失败:", response.message)
+
 
 if __name__ == "__main__":
     main()
+

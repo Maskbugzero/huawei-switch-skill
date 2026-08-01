@@ -1,32 +1,41 @@
 #!/usr/bin/env python3
 """
-Skill Example 06: 配置一致性校验与报告生成
+Skill Example 06: 配置一致性校验（推荐使用 AgentAdapter）
 
-展示如何使用 Skill 进行部署后或日常的配置校验。
+展示如何通过 AgentAdapter 执行配置校验。
 """
 
-from src.console import Connection
-from src.verify import ConfigVerifier
+from src.agent import AgentAdapter, AgentRequest, DeviceInfo
+
 
 def main():
-    print("=== Skill Example: 配置校验 ===")
+    print("=== Skill Example: 通过 AgentAdapter 执行配置校验 ===")
 
-    with Connection(port="COM4", password="your_password") as conn:
-        verifier = ConfigVerifier(conn)
+    adapter = AgentAdapter()
 
-        # 执行校验
-        report = verifier.verify(
-            rules=["vlan", "interface", "stp", "ssh"],
-            device_name="SW-01"
-        )
+    request = AgentRequest(
+        action="validate",
+        device=DeviceInfo(port="COM4", password="your_password"),
+        variables={
+            "device_name": "SW-01",
+            "before_config_path": "backups/SW-01/20260801-143022/current-configuration.txt",
+            "after_config_path": "backups/SW-01/20260801-150000/current-configuration.txt",
+            "expected": {
+                "vlan": ["10", "20", "30"],
+                "management_ip": "192.168.1.10"
+            }
+        }
+    )
 
-        print("校验报告:")
-        print(report.to_markdown())   # 或 report.to_html()
+    response = adapter.execute(request)
 
-        if report.has_issues():
-            print("\n⚠️ 发现配置问题，建议修复")
-        else:
-            print("\n✅ 配置符合预期")
+    if response.success:
+        report = response.data.get("validation_report", {})
+        print("校验结果:", report)
+    else:
+        print("校验失败:", response.message)
+
 
 if __name__ == "__main__":
     main()
+

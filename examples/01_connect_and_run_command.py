@@ -1,9 +1,37 @@
 #!/usr/bin/env python3
 """
-Skill Example 01: 最简 Console 连接与命令执行
+Skill Example 01: 执行单条命令（推荐使用 AgentAdapter）
 
 这是使用 huawei-switch-skill Skill 的最基础示例。
+推荐通过 AgentAdapter 调用。
 """
+
+from src.agent import AgentAdapter, AgentRequest, DeviceInfo
+
+
+def main():
+    print("=== Skill Example: 通过 AgentAdapter 执行命令 ===")
+
+    adapter = AgentAdapter()
+
+    request = AgentRequest(
+        action="command",
+        device=DeviceInfo(port="COM4", password="your_password"),
+        variables={"command": "display version"}
+    )
+
+    response = adapter.execute(request)
+
+    if response.success:
+        print("命令执行成功:")
+        print(response.data.get("output", "")[:300])
+    else:
+        print("执行失败:", response.message)
+
+
+if __name__ == "__main__":
+    main()
+
 
 from src.console import Connection
 
