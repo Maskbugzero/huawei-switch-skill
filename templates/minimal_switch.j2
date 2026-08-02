@@ -1,0 +1,50 @@
+{# 最小配置模板 - 用于快速测试和原型验证 #}
+{# 适用于临时测试环境、实验室场景 #}
+
+system-view
+sysname {{ hostname | default('Test-SW') }}
+
+{# 最小用户配置 #}
+aaa
+ local-user admin password irreversible-cipher {{ admin_password | default('Test@2026') }}
+ local-user admin privilege level 15
+ local-user admin service-type ssh telnet
+ quit
+
+{# 最小 VLAN 配置 #}
+vlan batch {{ vlan_list | default('10 20 30') }}
+
+{# 管理接口（可选） #}
+{% if mgmt_ip is defined %}
+interface Vlanif{{ mgmt_vlan | default('100') }}
+ description ## Management ##
+ ip address {{ mgmt_ip }} {{ mgmt_mask | default('255.255.255.0') }}
+ undo shutdown
+ quit
+{% endif %}
+
+{# 最小上行链路配置（可选） #}
+{% if uplink is defined %}
+interface {{ uplink }}
+ description ## Uplink ##
+ port link-type trunk
+ port trunk allow-pass vlan {{ uplink_vlans | default(vlan_list) | default('10 20 30') }}
+ undo shutdown
+ quit
+{% endif %}
+
+{# 最小接入端口配置（可选） #}
+{% if access_ports is defined %}
+{% for port in access_ports %}
+interface {{ port }}
+ description ## Access Port ##
+ port link-type access
+ port default vlan {{ access_vlan | default('20') }}
+ undo shutdown
+ quit
+{% endfor %}
+{% endif %}
+
+{# 保存配置提示 #}
+{# 使用后请执行: save #}
+{# 注意: 此模板仅用于测试，生产环境请使用 access_switch.j2 / aggregation_switch.j2 / core_switch.j2 #}
