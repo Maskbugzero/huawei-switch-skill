@@ -42,6 +42,21 @@ BKP001 = ErrorCode("BKP001", "backup", "备份失败")
 # 回滚相关
 RBK001 = ErrorCode("RBK001", "rollback", "回滚失败")
 
+# 模板相关
+TPL001 = ErrorCode("TPL001", "template", "模板不存在")
+TPL002 = ErrorCode("TPL002", "template", "模板渲染失败")
+TPL003 = ErrorCode("TPL003", "template", "模板变量缺失")
+
+# 部署相关
+DEP001 = ErrorCode("DEP001", "deploy", "部署命令执行失败")
+DEP002 = ErrorCode("DEP002", "deploy", "部署前配置采集失败")
+DEP003 = ErrorCode("DEP003", "deploy", "部署后配置校验失败")
+
+# 命令执行相关
+CMD001 = ErrorCode("CMD001", "command", "命令执行失败")
+CMD002 = ErrorCode("CMD002", "command", "命令超时")
+CMD003 = ErrorCode("CMD003", "command", "命令返回错误")
+
 # Agent 适配器相关
 APT001 = ErrorCode("APT001", "adapter", "无效请求")
 APT002 = ErrorCode("APT002", "adapter", "不支持的操作")

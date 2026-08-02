@@ -14,6 +14,7 @@ from src.console.logger import get_logger
 from src.command.error_detector import ErrorDetector
 from src.command.response_parser import ResponseParser
 from src.command.save_handler import SaveHandler
+from src.command.exceptions import CommandExecutionError
 
 logger = get_logger("command")
 
@@ -46,7 +47,11 @@ class CommandExecutor:
         error = self.error_detector.detect(output)
         if error:
             logger.error(f"命令执行错误: {error}")
-            raise Exception(f"Command failed: {error}")
+            raise CommandExecutionError(
+                error_type=error,
+                output=output,
+                command=command,
+            )
 
         parsed = self.response_parser.parse(output)
         return parsed

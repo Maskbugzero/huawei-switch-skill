@@ -9,10 +9,12 @@ from src.command.executor import CommandExecutor
 from src.command.response_parser import ResponseParser
 from src.command.error_detector import ErrorDetector
 from src.command.save_handler import SaveHandler
+from src.command.exceptions import CommandExecutionError
 
 __all__ = [
     "CommandExecutor",
     "ResponseParser",
     "ErrorDetector",
     "SaveHandler",
+    "CommandExecutionError",
 ]
