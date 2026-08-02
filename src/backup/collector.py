@@ -13,6 +13,7 @@ from typing import Dict, List, Optional
 
 from src.console import Connection
 from src.console.logger import get_logger
+from src.console.exceptions import ConsoleTimeout, ConsoleDisconnect, CommandError
 
 logger = get_logger("backup.collector")
 
@@ -47,6 +48,8 @@ class ConfigCollector:
             try:
                 logger.info("执行 screen-length 0 temporary 关闭分页...")
                 self.connection.send_command("screen-length 0 temporary", timeout=10)
+            except (ConsoleTimeout, ConsoleDisconnect, CommandError) as e:
+                logger.warning(f"关闭分页失败（特定异常）: {e}")
             except Exception as e:
                 logger.warning(f"关闭分页失败: {e}")
 

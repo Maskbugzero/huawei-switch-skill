@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any, Dict, List, Optional
 
 from src.console.logger import get_logger
@@ -26,7 +27,10 @@ class ConfigParser:
         self.aaa_parser = AAAParser()
 
     def parse(self, config_text: str) -> Dict[str, Any]:
-        """将配置文本解析为结构化对象。"""
+        """将配置文本解析为结构化对象。
+
+        增强日志：记录解析结果统计，便于调试和监控。
+        """
         result = {
             "sysname": self._parse_sysname(config_text),
             "vlans": self.vlan_parser.parse(config_text),
@@ -35,10 +39,16 @@ class ConfigParser:
             "aaa": self.aaa_parser.parse(config_text),
             "raw_config": config_text,
         }
-        logger.info("配置解析完成")
+
+        # 统计日志
+        vlan_count = len(result["vlans"]) if result["vlans"] else 0
+        interface_count = len(result["interfaces"]) if result["interfaces"] else 0
+        logger.info(
+            f"配置解析完成: sysname={result['sysname']}, "
+            f"vlans={vlan_count}, interfaces={interface_count}"
+        )
         return result
 
     def _parse_sysname(self, text: str) -> Optional[str]:
-        import re
         match = re.search(r"sysname\s+(\S+)", text)
         return match.group(1) if match else None

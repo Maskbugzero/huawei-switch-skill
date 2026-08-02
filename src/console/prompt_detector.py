@@ -16,15 +16,15 @@ logger = get_logger("prompt_detector")
 class PromptDetector:
     """提示符自动识别器。"""
 
-    # 常见华为提示符模式
+    # 常见华为提示符模式（使用行尾锚点避免误判）
     PROMPT_PATTERNS = [
-        r"<[\w\-]+>",           # <hostname>
-        r"\[[\w\-]+\]",         # [hostname]
-        r"[\w\-]+>",            # hostname>
-        r"[\w\-]+\]",           # hostname]
-        r"Password:",           # 密码提示
-        r"password:",           # 小写
-        r"Confirm Password:",   # 确认密码
+        r"<[\w\-]+>\s*$",           # <hostname>（用户视图）
+        r"\[[\w\-]+\]\s*$",         # [hostname]（系统视图）
+        r"[\w\-]+>\s*$",            # hostname>（兼容）
+        r"[\w\-]+\]\s*$",           # hostname]（兼容）
+        r"[Pp]assword[:：]\s*$",    # 密码提示（支持中英文冒号）
+        r"Confirm [Pp]assword[:：]\s*$",  # 确认密码
+        r"Continue\?\s*\[Y/N\]",    # Continue? [Y/N]
     ]
 
     def __init__(self) -> None:
