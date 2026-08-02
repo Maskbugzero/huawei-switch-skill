@@ -8,19 +8,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased] - 2026-08-02
 
 ### Added
-- **Error codes** (`src/agent/error_codes.py`):
-  - Template errors: `TPL001` (not found), `TPL002` (render failed), `TPL003` (missing variables)
-  - Deploy errors: `DEP001` (command failed), `DEP002` (pre-deploy collection failed), `DEP003` (post-deploy verification failed)
-  - Command errors: `CMD001` (execution failed), `CMD002` (timeout), `CMD003` (error response)
-- **CommandExecutionError** exception (`src/command/exceptions.py`):
-  - Dedicated exception for command execution failures with `error_type`, `output`, `command` attributes
-  - Exported from `src/command/__init__.py`
-- **New examples**:
-  - `examples/07_ssh_via_agent_adapter.py`: SSH mode usage with `DeviceInfo`, backup/command/deploy over SSH
-  - `examples/08_error_handling.py`: Comprehensive error scenarios and best practices
-- **New template**: `templates/minimal_switch.j2` for quick testing and prototyping
-- **Documentation**: `templates/VARIABLES.md` - Complete variable naming standards and usage guide
-- **Tests**: Increased from 48 to 51 tests with `CommandExecutionError` coverage
+- **Parser robustness**:
+  - `InterfaceParser.MAX_CONFIG_LENGTH` constant with input size protection (500k chars)
+  - `re.error` exception handling with clear warning log
+  - Consistent use of project logger
+- **Verify rules**:
+  - `_check_vlan`: actual existence check based on `expected["vlan_list"]`
+  - `_check_trunk`: basic interface presence check
+  - Support for `pass` / `fail` / `skipped` states
+- **Tests**:
+  - Added `test_parser_interface_edge_cases` (empty input, large config, shutdown detection)
+  - Added `test_verify_rules_edge_cases` (skipped case, missing VLAN)
+  - Total tests increased to 56
+
+### Changed
+- **Documentation**:
+  - `SKILL.md`: Updated Parser and Verify capability descriptions
+  - Added SSH dual-path boundary clarification (`SSHFirstConnect` vs AgentAdapter netmiko)
+  - Added role headers in `CLAUDE.md` and `README.md` to reduce documentation confusion
+- **SSH**:
+  - `SSHDevice.old_password` and `new_password` migrated to `SecretStr` for consistency
+
+### Fixed
+- Missing `return interfaces` in `InterfaceParser.parse()` after robustness changes
+- Inconsistent logging in Parser module
+
+### Tests
+- All 56 tests passing
 
 ### Changed
 - **AgentAdapter** (`src/agent/adapter.py`):
