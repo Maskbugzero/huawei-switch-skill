@@ -5,6 +5,50 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] - 2026-08-02
+
+### Added
+- **Error codes** (`src/agent/error_codes.py`):
+  - Template errors: `TPL001` (not found), `TPL002` (render failed), `TPL003` (missing variables)
+  - Deploy errors: `DEP001` (command failed), `DEP002` (pre-deploy collection failed), `DEP003` (post-deploy verification failed)
+  - Command errors: `CMD001` (execution failed), `CMD002` (timeout), `CMD003` (error response)
+- **CommandExecutionError** exception (`src/command/exceptions.py`):
+  - Dedicated exception for command execution failures with `error_type`, `output`, `command` attributes
+  - Exported from `src/command/__init__.py`
+- **New examples**:
+  - `examples/07_ssh_via_agent_adapter.py`: SSH mode usage with `DeviceInfo`, backup/command/deploy over SSH
+  - `examples/08_error_handling.py`: Comprehensive error scenarios and best practices
+- **New template**: `templates/minimal_switch.j2` for quick testing and prototyping
+- **Documentation**: `templates/VARIABLES.md` - Complete variable naming standards and usage guide
+- **Tests**: Increased from 48 to 51 tests with `CommandExecutionError` coverage
+
+### Changed
+- **AgentAdapter** (`src/agent/adapter.py`):
+  - SSH connection now uses explicit `conn_timeout=30` and `read_timeout=30`
+  - SSH deploy includes idempotency check before applying config
+  - Disconnect exceptions now logged as warnings instead of silently swallowed
+- **PromptDetector** (`src/console/prompt_detector.py`):
+  - Enhanced regex patterns with line-end anchors (`\s*$`) for accurate prompt matching
+  - Added support for Chinese colon (`：`) and `Continue? [Y/N]` prompts
+- **Parser** (`src/parser/parser.py`):
+  - Moved `import re` to module top level (removed function-level import)
+  - Enhanced `parse()` logging with statistics (sysname, vlan count, interface count)
+- **Backup** (`src/backup/collector.py`):
+  - Improved exception handling: specific `ConsoleTimeout`/`ConsoleDisconnect`/`CommandError` + generic fallback
+- **Examples**: All examples now use modern `DeviceInfo` pattern
+- **Documentation**: `CLAUDE.md` and `README.md` updated to reference archived `docs/archive/agent.md`
+
+### Fixed
+- SSH parameter validation now correctly distinguishes SSH vs Console modes
+- SSH deploy missing idempotency check (now performs config comparison before applying)
+- Verbose output logs (`initial_output`, `verify_output`) downgraded from `info` to `debug` level
+- `_wait_for_output` now returns `(output, timed_out)` tuple for timeout awareness
+
+### Tests
+- All 51 tests passing
+- Added 3 unit tests for `CommandExecutionError`
+- Test coverage expanded for error handling scenarios
+
 ## [Unreleased] - 2026-08-01
 
 ### Added

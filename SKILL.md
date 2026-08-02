@@ -19,15 +19,18 @@ categories:
   - infrastructure
   - automation
 capabilities:
-  - serial-console-communication
-  - automated-login-and-pager-disable
-  - command-execution-with-error-handling
-  - configuration-backup-and-export
-  - structured-config-parsing
-  - jinja2-template-rendering
-  - automated-deployment-with-rollback
-  - configuration-verification-and-reporting
-  - ssh-first-connect-with-password-change
+	  - serial-console-communication
+	  - automated-login-and-pager-disable
+	  - command-execution-with-error-handling
+	  - dedicated-error-codes-and-exceptions
+	  - configuration-backup-and-export
+	  - structured-config-parsing
+	  - jinja2-template-rendering
+	  - automated-deployment-with-idempotency-and-rollback
+	  - ssh-first-connect-with-password-change
+	  - ssh-mode-agent-adapter-support
+	  - configuration-verification-and-reporting
+	  - comprehensive-error-handling-examples
 entrypoints:
   python:
     - "from src.console import Connection"

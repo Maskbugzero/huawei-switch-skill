@@ -98,7 +98,7 @@ huawei-switch-skill/
 ├── SKILL.md              # Skill 元数据定义（规范格式）
 ├── README.md
 ├── docs/archive/agent.md # 开发路线图（历史文档，已归档）
-├── examples/             # Skill 使用案例
+├── examples/ (9 个示例)             # Skill 使用案例
 │   ├── 01_connect_and_run_command.py
 │   ├── 02_backup_config.py
 │   ├── 03_using_agent_adapter.py
@@ -112,7 +112,7 @@ huawei-switch-skill/
 │   ├── deploy/      # 自动部署
 │   ├── verify/      # 配置校验
 │   └── agent/       # Skill 统一调用入口 (AgentAdapter)
-├── templates/
+├── templates/ (4 个模板)
 ├── tests/
 └── docs/            # 各模块详细文档
 ```
@@ -134,7 +134,7 @@ huawei-switch-skill/
 
 - **测试覆盖大幅提升**：
   - 新增针对 planner、deployer 失败场景、SSH 的多项单元测试
-  - 测试总数提升至 48+
+  - 测试总数提升至 51+
 
 - Pydantic 模型全面升级、`AgentAdapter` 异常处理优化等
 
@@ -181,7 +181,7 @@ python -m pytest tests/ -v
 
 ## 后续计划
 
-- 继续丰富 `examples/` 目录中的 Skill 使用案例
+- 继续丰富 `examples/ (9 个示例)` 目录中的 Skill 使用案例
 - 完善 `AgentAdapter` 的更多 action 支持
 - 支持 SSH Transport（已实现首次连接 + 强制改密）
 - 丰富模板库
