@@ -19,6 +19,9 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional
 
+import paramiko
+from netmiko import ConnectHandler
+
 from src.console import Connection
 from src.agent.error_codes import (
     APT001, APT002, CON001, CON003,
@@ -231,8 +234,6 @@ class AgentAdapter:
         Returns:
             AgentResponse: 标准化响应
         """
-        import paramiko
-        from netmiko import ConnectHandler
 
         host = request.device.host or request.device.port
         port = request.device.port_number
@@ -247,6 +248,8 @@ class AgentAdapter:
             "username": username,
             "password": password,
             "port": port,
+            "conn_timeout": 30,      # 连接超时 30 秒
+            "read_timeout": 30,      # 读取超时 30 秒
         }
 
         conn = None

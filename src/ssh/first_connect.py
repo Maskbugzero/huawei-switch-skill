@@ -88,8 +88,8 @@ class SSHFirstConnect:
         # 这些模式专门为华为 VRP CLI 设计
         prompt_patterns = [
             r'>\s*$',                    # 用户视图提示符 (例如 <SW-01>)
-            r'#\s*$',                    # 系统视图提示符 (例如 [SW-01])
-            r'\]\s*$',                   # 交互提示符结尾 (例如 Continue? [Y/N])
+            r'#\s*$',                    # 某些 CLI 的系统视图提示符（兼容）
+            r'\]\s*$',                   # 系统视图/交互提示符结尾 (例如 [SW-01], Continue? [Y/N])
             r'[Pp]assword[:：]\s*$',     # 密码提示
             r'[Cc]ontinue\?\s*\[Y/N\]',  # Continue 确认提示
         ]
@@ -149,18 +149,18 @@ class SSHFirstConnect:
                 look_for_keys=False,
                 allow_agent=False,
             )
-            logger.info("[+] 第一次 SSH 连接成功")
+            logger.info("第一次 SSH 连接成功")
 
             shell = self.client.invoke_shell()
             shell.settimeout(20)
             time.sleep(1)
 
             initial_output, _ = self._wait_for_output(shell, timeout=6)
-            logger.debug("[*] 初始输出:\n" + initial_output)
+            logger.debug("初始输出:\n" + initial_output)
 
             # 判断是否进入改密流程
             if "The password needs to be changed" in initial_output or "Continue? [Y/N]" in initial_output:
-                logger.info("[!] 检测到需要修改密码，开始处理...")
+                logger.info("检测到需要修改密码，开始处理...")
 
                 # 确认改密
                 shell.send("y\n")
@@ -169,21 +169,21 @@ class SSHFirstConnect:
                 logger.debug("改密确认输出:\n" + output)
 
                 # 输入旧密码
-                logger.info("[*] 输入旧密码...")
+                logger.info("输入旧密码...")
                 shell.send(self.device.old_password + "\n")
                 time.sleep(1.5)
                 output, _ = self._wait_for_output(shell)
                 logger.debug("旧密码输入后输出:\n" + output)
 
                 # 输入新密码
-                logger.info("[*] 输入新密码...")
+                logger.info("输入新密码...")
                 shell.send(self.device.new_password + "\n")
                 time.sleep(1.5)
                 output, _ = self._wait_for_output(shell)
                 logger.debug("新密码输入后输出:\n" + output)
 
                 # 确认新密码
-                logger.info("[*] 再次确认新密码...")
+                logger.info("再次确认新密码...")
                 shell.send(self.device.new_password + "\n")
                 time.sleep(2)
                 output, _ = self._wait_for_output(shell, timeout=10)
@@ -202,7 +202,7 @@ class SSHFirstConnect:
                 return self._verify_with_new_password()
 
             else:
-                logger.info("[*] 未检测到强制改密提示，可能已经修改过密码。")
+                logger.info("未检测到强制改密提示，可能已经修改过密码。")
                 shell.close()
                 self.client.close()
                 return True
@@ -230,13 +230,13 @@ class SSHFirstConnect:
                 look_for_keys=False,
                 allow_agent=False,
             )
-            logger.info("[+] 使用新密码登录成功！")
+            logger.info("使用新密码登录成功！")
             shell2 = client2.invoke_shell()
             time.sleep(1)
             verify_output, _ = self._wait_for_output(shell2, timeout=5)
             logger.debug("验证输出:\n" + verify_output)
 
-            logger.info("[成功] 新密码已生效，可以正常使用。")
+            logger.info("新密码已生效，可以正常使用。")
 
             # 改密成功后自动备份配置（使用 Netmiko）
             self._backup_config_after_change(client2)
@@ -271,7 +271,7 @@ class SSHFirstConnect:
             backup_path = exporter.export_backup(
                 f"ssh-{self.device.host}", {"display current-configuration": config}
             )
-            logger.info(f"[+] 配置备份已保存: {backup_path}")
+            logger.info(f"配置备份已保存: {backup_path}")
             conn.disconnect()
             return True
 
