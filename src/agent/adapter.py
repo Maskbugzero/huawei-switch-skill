@@ -83,7 +83,7 @@ class AgentAdapter:
         # 基本参数校验（根据连接类型区分）
         if is_ssh:
             # SSH 模式：需要 password，host 或 port 至少有一个
-            if not request.device.password:
+            if not request.device.password.get_secret_value():
                 return AgentResponse(
                     success=False,
                     code=APT001.code,
@@ -168,7 +168,7 @@ class AgentAdapter:
             # 使用上下文管理器确保自动 disconnect（即使异常也安全）
             with Connection(
                 port=request.device.port,
-                password=request.device.password
+                password=request.device.password.get_secret_value()
             ) as conn:
                 if request.action == "backup":
                     from src.backup import ConfigCollector, ConfigExporter
@@ -238,7 +238,7 @@ class AgentAdapter:
         host = request.device.host or request.device.port
         port = request.device.port_number
         username = request.device.username
-        password = request.device.password
+        password = request.device.password.get_secret_value()
 
         logger.info(f"SSH 模式执行 action={request.action}，目标: {host}:{port}")
 
@@ -267,7 +267,7 @@ class AgentAdapter:
                     )
                 output = conn.send_command(cmd, read_timeout=30)
                 conn.disconnect()
-                return AgentResponse(success=True, data={"output": output, "transport": "ssh"})
+                return AgentResponse(success=True, data={"output": output, "transport": "ssh", "note": "SSH transport is experimental, Console mode is recommended for full features"})
 
             elif request.action == "backup":
                 from src.backup import ConfigExporter
@@ -278,7 +278,7 @@ class AgentAdapter:
                 conn.disconnect()
                 return AgentResponse(
                     success=True,
-                    data={"backup_path": str(path), "transport": "ssh"}
+                    data={"backup_path": str(path), "transport": "ssh", "note": "SSH transport is experimental, Console mode is recommended for full features"}
                 )
 
             elif request.action == "deploy":
@@ -296,6 +296,7 @@ class AgentAdapter:
                 except Exception as e:
                     logger.warning(f"SSH deploy 采集当前配置失败，跳过幂等性检查: {e}")
                     current_config = None
+                    # 记录到响应中（通过后续构造的 response data）
 
                 if current_config is not None:
                     # 简单的配置规范化比对

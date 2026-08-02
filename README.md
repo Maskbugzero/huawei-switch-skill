@@ -1,5 +1,8 @@
 # Huawei Switch Skill
 
+> **本文件为项目通用概述**，适合快速了解功能和上手使用。
+> Claude Code 专用实践请参考 `CLAUDE.md`；完整 Skill 定义请参考 `SKILL.md`。
+
 **huawei-switch-skill** 是一个企业级的华为 VRP 交换机 Console 自动化 **Skill**。
 
 它封装了从串口连接、命令执行、配置备份、解析、模板渲染、部署到校验的完整生命周期能力，可被 Claude Code、Hermes 或其他上层 Agent 系统直接调用。

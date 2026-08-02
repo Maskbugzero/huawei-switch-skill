@@ -40,7 +40,7 @@ entrypoints:
   cli:
     - "python main.py connect --port COM4 --password xxx"
     - "python main.py backup --port COM4 --password xxx --device SW-01"
-    - "python main.py deploy --script admin --port COM4 -p xxx --device-name SW-01"
+    - "	    - "python main.py deploy ...（已弃用，推荐使用 AgentAdapter Python API）""
 dependencies:
   - pyserial>=3.5
   - jinja2>=3.1.0
@@ -102,11 +102,16 @@ python -m venv .venv
 | 串口连接与认证        | `console`         | 自动登录、关闭分页、提示符识别    |
 | 稳定命令执行          | `command`         | 错误检测、save 自动确认           |
 | 配置备份与归档        | `backup`          | 按时间戳目录结构化存储            |
-| 配置解析              | `parser`          | 转换为结构化 Python 对象          |
+| 配置解析              | `parser`          | 转换为结构化 Python 对象（支持接口 IP、描述、shutdown 状态及 VLAN 名称提取）；具备大配置输入保护和异常容错 |
 | 模板渲染              | `template`        | Jinja2 + YAML 变量                |
 | 自动部署 + 回滚       | `deploy`          | 预检查、失败回滚、**幂等部署 + Dry-Run 支持**、部署步骤规划器（`DeploymentPlanner`）、危险命令检测 |
-| 配置一致性校验        | `verify`          | 生成 HTML/Markdown 报告           |
+| 配置一致性校验        | `verify`          | 基于规则的配置校验（支持 VLAN 存在性、SSH 状态等检查），返回 pass/fail/skipped 状态 |
 | SSH 首次改密          | `ssh`             | 首次连接强制修改密码              |
+
+**SSH 双路径说明**：
+- `ssh` 模块（`SSHFirstConnect`）：专门用于**首次 SSH 登录强制改密**场景，独立于主流程。
+- 主 `AgentAdapter` 中的 SSH 支持（netmiko）：用于常规 backup / command / deploy 操作。
+- 推荐：大多数场景优先使用 Console + `AgentAdapter`；仅在需要首次改密时使用 `SSHFirstConnect`。
 
 ## 快速开始
 
@@ -213,6 +218,7 @@ response = adapter.execute(request)
 - 内部使用 `with Connection(...) as conn:` 上下文管理器，彻底解决资源泄漏问题。
 - 错误处理已优化，支持更具体的异常捕获与日志记录。
 - **AgentRequest 已迁移至 Pydantic 模型**，支持自动 JSON Schema 生成，更适合 LLM Tool Calling。
+- `DeviceInfo` 新增可选字段 `connection_type: Literal["console", "ssh"]`，显式指定连接类型时优先于启发式检测（host/port 判断）。
 
 ### 3. 其他常用类
 

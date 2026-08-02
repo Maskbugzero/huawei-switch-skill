@@ -18,7 +18,7 @@ from typing import Optional
 import paramiko
 from paramiko import SSHClient, AutoAddPolicy
 from netmiko import ConnectHandler
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, SecretStr
 
 from src.console.logger import get_logger
 
@@ -40,15 +40,19 @@ class SSHDevice(BaseModel):
 
     host: str = Field(..., description="SSH host address")
     username: str = Field(default="admin", description="SSH username")
-    old_password: str = Field(default="", description="Old password for first connect")
-    new_password: str = Field(default="", description="New password to set")
+    old_password: SecretStr = Field(default="", description="Old password for first connect")
+    new_password: SecretStr = Field(default="", description="New password to set")
     port: int = Field(default=22, description="SSH port")
 
 
 class SSHFirstConnect:
-    """SSH 首次连接 + 强制改密工具。
+    """
+    SSH 首次连接 + 强制改密工具（独立特殊场景）。
 
-    返回值推荐使用 SSHChangePasswordResult 模型。
+    注意：此模块与 AgentAdapter 中的常规 SSH 支持（netmiko）为两条并行路径。
+    - SSHFirstConnect：仅用于设备首次 SSH 登录时强制修改密码。
+    - AgentAdapter SSH 路径：用于常规 backup/command/deploy 操作。
+    推荐大多数场景使用 Console + AgentAdapter。
     """
 
     def __init__(self, device: SSHDevice, timeout: int = 15):
@@ -144,7 +148,7 @@ class SSHFirstConnect:
                 hostname=self.device.host,
                 port=self.device.port,
                 username=self.device.username,
-                password=self.device.old_password,
+                password=self.device.old_password.get_secret_value(),
                 timeout=self.timeout,
                 look_for_keys=False,
                 allow_agent=False,
@@ -170,21 +174,21 @@ class SSHFirstConnect:
 
                 # 输入旧密码
                 logger.info("输入旧密码...")
-                shell.send(self.device.old_password + "\n")
+                shell.send(self.device.old_password.get_secret_value() + "\n")
                 time.sleep(1.5)
                 output, _ = self._wait_for_output(shell)
                 logger.debug("旧密码输入后输出:\n" + output)
 
                 # 输入新密码
                 logger.info("输入新密码...")
-                shell.send(self.device.new_password + "\n")
+                shell.send(self.device.new_password.get_secret_value() + "\n")
                 time.sleep(1.5)
                 output, _ = self._wait_for_output(shell)
                 logger.debug("新密码输入后输出:\n" + output)
 
                 # 确认新密码
                 logger.info("再次确认新密码...")
-                shell.send(self.device.new_password + "\n")
+                shell.send(self.device.new_password.get_secret_value() + "\n")
                 time.sleep(2)
                 output, _ = self._wait_for_output(shell, timeout=10)
                 logger.debug("新密码确认后输出:\n" + output)
@@ -225,7 +229,7 @@ class SSHFirstConnect:
                 hostname=self.device.host,
                 port=self.device.port,
                 username=self.device.username,
-                password=self.device.new_password,
+                password=self.device.new_password.get_secret_value(),
                 timeout=self.timeout,
                 look_for_keys=False,
                 allow_agent=False,
@@ -260,7 +264,7 @@ class SSHFirstConnect:
                 "device_type": "huawei_vrp",
                 "host": self.device.host,
                 "username": self.device.username,
-                "password": self.device.new_password,
+                "password": self.device.new_password.get_secret_value(),
                 "port": self.device.port,
             }
             conn = ConnectHandler(**device)

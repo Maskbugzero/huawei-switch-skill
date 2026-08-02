@@ -37,7 +37,14 @@ class DeploymentPlanner:
         return categories
 
     def generate_rollback_plan(self, config_text: str) -> List[str]:
-        """基于当前配置生成简单的回滚计划（将配置命令转为 undo 命令）。"""
+        """
+        基于当前配置生成简单的回滚计划（将配置命令转为 undo 命令）。
+
+        注意：当前实现为简单前缀策略，仅对 interface/vlan/ip address 及普通命令
+        统一添加 "undo " 前缀，并跳过 display/ping 等只读命令。
+        对于复杂对象（ACL、路由策略、QoS 等），生成的 undo 命令可能不完整或无效。
+        生产环境建议结合人工审核或使用完整 DeploymentEngine 的自动回滚机制。
+        """
         steps = self.plan(config_text)
         rollback_steps = []
         skip_prefixes = ["display", "ping", "traceroute", "telnet"]

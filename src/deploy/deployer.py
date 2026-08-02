@@ -85,6 +85,9 @@ class DeploymentEngine:
         except Exception as e:
             logger.warning(f"采集当前配置失败，跳过幂等性检查: {e}")
             current_config = None
+            report["idempotency_check_skipped"] = True
+            report["warnings"] = report.get("warnings", [])
+            report["warnings"].append("当前配置采集失败，幂等性检查已跳过")
 
         if backup:
             backup_path = self.exporter.export_backup(

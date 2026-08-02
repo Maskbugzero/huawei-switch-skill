@@ -1,5 +1,8 @@
 # CLAUDE.md
 
+> **本文件为 Claude Code 专用工程参考文档**，重点记录与 Claude 交互相关的实践、注意事项和架构决策。
+> 通用项目介绍请参考 `README.md`；Skill 规范定义请参考 `SKILL.md`。
+
 ## 项目概述
 
 `huawei-switch-skill` 是一个企业级的 **华为 VRP 交换机网络自动化 Skill**，专门设计为供 Claude Code、Hermes 等 LLM Agent 系统调用的底层执行器。
