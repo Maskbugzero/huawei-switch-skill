@@ -6,14 +6,14 @@
 
 **核心定位**：提供华为交换机 Console（串口）自动化运维的完整能力封装，而非自主 Agent。
 
-**已完成阶段**：agent.md 路线图第 1~7 阶段全部完成。
+**已完成阶段**：agent.md（历史文档）路线图第 1~7 阶段全部完成。
 
 ```
 huawei-switch-skill/
 ├── CLAUDE.md
 ├── SKILL.md              # Skill 元数据定义（最重要参考）
 ├── README.md
-├── agent.md              # 开发路线图
+├── docs/archive/agent.md # 开发路线图（历史文档，已归档）
 ├── examples/             # Skill 使用案例
 │   ├── 01_connect_and_run_command.py
 │   ├── 02_backup_config.py
@@ -37,7 +37,7 @@ huawei-switch-skill/
 
 **核心定位**：提供华为交换机 Console（串口）自动化运维的完整能力封装，而非自主 Agent。
 
-**已完成阶段**：agent.md 路线图第 1~7 阶段全部完成。
+**已完成阶段**：agent.md（历史文档）路线图第 1~7 阶段全部完成。
 
 ## 项目结构
 
@@ -46,7 +46,7 @@ huawei-switch-skill/
 ├── CLAUDE.md
 ├── SKILL.md              # Skill 元数据定义（最重要参考）
 ├── README.md
-├── agent.md              # 开发路线图
+├── docs/archive/agent.md # 开发路线图（历史文档，已归档）
 ├── examples/             # Skill 使用案例
 │   ├── 01_connect_and_run_command.py
 │   ├── 02_backup_config.py
@@ -191,7 +191,7 @@ response = adapter.execute(request)
 ## 参考文档
 
 - `SKILL.md` — Skill 元数据与完整使用指南（最重要）
-- `agent.md` — 开发路线图
+- `docs/archive/agent.md` — 开发路线图（历史文档）
 - `README.md` — 项目概览
 - `docs/` — 各模块详细文档
 

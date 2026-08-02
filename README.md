@@ -10,7 +10,7 @@
 
 ## 项目状态
 
-已完成 agent.md 路线图 **第 1~7 阶段**，并已包装为标准 Skill（见 `SKILL.md`）：
+已完成 agent.md（历史文档）路线图 **第 1~7 阶段**，并已包装为标准 Skill（见 `SKILL.md`）：
 
 | 阶段 | 模块 | 状态 |
 |------|------|------|
@@ -97,7 +97,7 @@ with Connection(port="COM4", password="xxx") as conn:
 huawei-switch-skill/
 ├── SKILL.md              # Skill 元数据定义（规范格式）
 ├── README.md
-├── agent.md              # 开发路线图
+├── docs/archive/agent.md # 开发路线图（历史文档，已归档）
 ├── examples/             # Skill 使用案例
 │   ├── 01_connect_and_run_command.py
 │   ├── 02_backup_config.py
@@ -190,7 +190,7 @@ python -m pytest tests/ -v
 ## 参考
 
 - `docs/00-overview.md` — 项目整体概览
-- `agent.md` — 完整开发路线图
+- `docs/archive/agent.md` — 完整开发路线图（历史文档）
 - `docs/` — 各阶段详细 API 与用法示例（含 08-agent.md、09-ssh.md）
 
 
