@@ -1,7 +1,7 @@
 ---
 name: huawei-switch-skill
-description: "Enterprise-grade Huawei VRP switch automation skill via Console. Provides full lifecycle management: serial connection, command execution, configuration backup, parsing, Jinja2 templating, deployment, and verification."
-version: 1.0.0
+description: "Use when automating Huawei VRP switches: Console for single-device config/deploy, or SSH batch management (inventory backup/command) for managed fleets; also first-login password change."
+version: 1.0.2
 author: User
 license: MIT
 tags:
@@ -19,18 +19,18 @@ categories:
   - infrastructure
   - automation
 capabilities:
-	  - serial-console-communication
-	  - automated-login-and-pager-disable
-	  - command-execution-with-error-handling
-	  - dedicated-error-codes-and-exceptions
-	  - configuration-backup-and-export
-	  - structured-config-parsing
-	  - jinja2-template-rendering
-	  - automated-deployment-with-idempotency-and-rollback
-	  - ssh-first-connect-with-password-change
-	  - ssh-mode-agent-adapter-support
-	  - configuration-verification-and-reporting
-	  - comprehensive-error-handling-examples
+  - serial-console-communication
+  - automated-login-and-pager-disable
+  - command-execution-with-error-handling
+  - dedicated-error-codes-and-exceptions
+  - configuration-backup-and-export
+  - structured-config-parsing
+  - jinja2-template-rendering
+  - automated-deployment-with-idempotency-and-rollback
+  - ssh-first-connect-with-password-change
+  - ssh-mode-agent-adapter-support
+  - configuration-verification-and-reporting
+  - comprehensive-error-handling-examples
 entrypoints:
   python:
     - "from src.console import Connection"
@@ -40,13 +40,13 @@ entrypoints:
   cli:
     - "python main.py connect --port COM4 --password xxx"
     - "python main.py backup --port COM4 --password xxx --device SW-01"
-    - "	    - "python main.py deploy ...（已弃用，推荐使用 AgentAdapter Python API）""
 dependencies:
   - pyserial>=3.5
   - jinja2>=3.1.0
   - pyyaml>=6.0
   - paramiko
-  - netmiko (optional, for SSH backup)
+  - netmiko
+  - pydantic>=2.0
 related_skills: []
 ---
 
@@ -87,31 +87,40 @@ python -m venv .venv
 
 ## 概述
 
-`huawei-switch-skill` 是一个专注于华为 VRP 交换机的 **Console 优先** 自动化 Skill。它封装了串口通信、命令执行、配置全生命周期管理等核心能力，可被 Claude Code、Hermes 或其他 Agent 系统直接调用。
+`huawei-switch-skill` 是华为 VRP 交换机自动化 Skill。**Console 与 SSH 只是连接方式不同，VRP 配置命令相同**；当前产品按使用场景分工如下：
+
+| 场景 | 连接方式 | 定位 |
+|------|----------|------|
+| **单台初始化 / 改配置** | **Console（主路径）** | 备份、模板部署、校验、完整 `DeploymentEngine` |
+| **已纳管设备日常/批量运维** | **SSH（批量管理）** | 多设备 backup、command；后续扩展批量巡检与配置 |
+| **首次上线强制改密** | SSH（`SSHFirstConnect`） | 独立小工具，不走主配置流 |
 
 **设计原则**：
-- Console 优先（最稳定可靠的接入方式）
-- 模块化、可独立使用
-- 支持 Mock 测试（无硬件环境可用）
-- 提供统一的 `AgentAdapter` 作为 Skill 调用入口
+- **Console = 配置主路径**（最稳、能力最全）
+- **SSH = 批量管理通道**（清单驱动，可并发扩展）
+- 命令层应复用同一套采集/执行/校验能力，避免两套 CLI 语义
+- 模块化、可 Mock、统一 `AgentAdapter` 入口
 
 ## 核心能力
 
-| 能力                  | 对应模块          | 说明                              |
-|-----------------------|-------------------|-----------------------------------|
-| 串口连接与认证        | `console`         | 自动登录、关闭分页、提示符识别    |
-| 稳定命令执行          | `command`         | 错误检测、save 自动确认           |
-| 配置备份与归档        | `backup`          | 按时间戳目录结构化存储            |
-| 配置解析              | `parser`          | 转换为结构化 Python 对象（支持接口 IP、描述、shutdown 状态及 VLAN 名称提取）；具备大配置输入保护和异常容错 |
-| 模板渲染              | `template`        | Jinja2 + YAML 变量                |
-| 自动部署 + 回滚       | `deploy`          | 预检查、失败回滚、**幂等部署 + Dry-Run 支持**、部署步骤规划器（`DeploymentPlanner`）、危险命令检测 |
-| 配置一致性校验        | `verify`          | 基于规则的配置校验（支持 VLAN 存在性、SSH 状态等检查），返回 pass/fail/skipped 状态 |
-| SSH 首次改密          | `ssh`             | 首次连接强制修改密码              |
+| 能力 | 模块 | 说明 |
+|------|------|------|
+| 串口连接与认证 | `console` | 配置主路径的连接层 |
+| 稳定命令执行 | `command` | 错误检测、save 确认（Console 主路径已接入） |
+| 配置备份与归档 | `backup` | 时间戳目录；Console / SSH / 批量共用导出 |
+| 配置解析 | `parser` | 结构化对象 |
+| 模板渲染 | `template` | Jinja2（`admin_password` 必填） |
+| 自动部署 | `deploy` | **仅推荐 Console**；危险命令默认阻断、意图子集幂等、Dry-Run |
+| 配置校验 | `verify` | 规则校验 |
+| SSH 首次改密 | `ssh.first_connect` | 上线改密 |
+| SSH 批量管理 | `ssh.batch` | 设备清单 + 批量 backup/command |
+| 统一入口 | `agent` | `AgentAdapter` |
 
-**SSH 双路径说明**：
-- `ssh` 模块（`SSHFirstConnect`）：专门用于**首次 SSH 登录强制改密**场景，独立于主流程。
-- 主 `AgentAdapter` 中的 SSH 支持（netmiko）：用于常规 backup / command / deploy 操作。
-- 推荐：大多数场景优先使用 Console + `AgentAdapter`；仅在需要首次改密时使用 `SSHFirstConnect`。
+**连接方式怎么选**：
+1. 机房串口改配置、开局、模板部署 → **Console + `AgentAdapter` / `DeploymentEngine`**
+2. 网上多台已通 SSH 的设备备份/巡检/跑命令 → **SSH 批量（`BatchSSHManager`）或 `DeviceInfo(connection_type="ssh")`**
+3. 出厂首次登录要改密 → **`SSHFirstConnect`**
+4. 单台 SSH deploy 可用但非主推；生产改配置优先 Console
 
 ## 快速开始
 
@@ -157,10 +166,16 @@ engine = DeploymentEngine()
 with Connection(port="COM4", password="xxx") as conn:
     report = engine.deploy(
         connection=conn,
-        template="base_switch.j2",
-        variables={"hostname": "SW-01", "vlan_list": "10 20 30"},
+        template="access_switch.j2",
+        variables={
+            "hostname": "SW-01",
+            "admin_password": "YourStrongPass@2026",
+            "vlan_list": "10 20 30",
+        },
         device_name="SW-01",
-        backup=True
+        backup=True,
+        # auto_rollback_on_failure=False  # 默认关闭
+        # allow_dangerous=False           # 默认阻断 reboot/reset/delete/format/shutdown
     )
     print(report)
 ```
@@ -234,12 +249,24 @@ response = adapter.execute(request)
 
 ### 行为说明
 
-| 场景                     | 返回 status     | 说明                                      | 是否执行命令 |
-|--------------------------|-----------------|-------------------------------------------|--------------|
-| 配置有差异               | `success`       | 正常下发配置                              | 是           |
-| 配置无差异               | `skipped`       | 检测到当前配置与目标一致，自动跳过        | 否           |
-| `dry_run=True`           | `dry_run`       | 仅模拟执行，不下发任何命令                | 否           |
-| 部署失败                 | `failed`        | 执行失败，可触发自动回滚                  | 部分执行     |
+| 场景                     | 返回 status     | `AgentResponse.success` | 说明 |
+|--------------------------|-----------------|-------------------------|------|
+| 配置有差异并下发成功     | `success`       | True                    | 正常下发 |
+| 目标意图已满足（子集）   | `skipped`       | True                    | 目标行均已在当前配置中 |
+| `dry_run=True`           | `dry_run`       | True                    | 仅模拟 |
+| 检测到危险命令且未放行   | `blocked`       | False                   | 默认安全策略 |
+| 部署失败                 | `failed`        | False                   | 默认不自动回滚 |
+
+幂等语义：**interface 感知意图子集**（目标接口块 ⊆ 同名接口当前配置；全局行在全局区匹配），不是整机配置全量相等，也不是无上下文扁平行集合。
+
+危险命令：默认关键词 `reboot/reset/delete/format/shutdown`（`undo shutdown` 不视为危险）。需显式 `allow_dangerous=True`（或 variables 中同名）才放行。
+
+自动回滚：默认 **关闭**。开启 `auto_rollback_on_failure=True` 时为实验性「备份逐行重放」，不保证完整恢复。
+
+部署成功后默认 **`save=True`** 落盘；`dry_run` / `skipped` 不 save。
+
+Planner：**不**全局去重，保证多接口模板子命令完整下发。
+
 
 ### 使用示例（推荐通过 AgentAdapter）
 
@@ -251,16 +278,20 @@ adapter = AgentAdapter()
 # Dry-Run 模式（强烈推荐在生产环境使用）
 request = AgentRequest(
     action="deploy",
-    device=DeviceInfo(port="COM4", password="xxx"),
+    device=DeviceInfo(port="COM4", password="xxx", connection_type="console"),
     template="access_switch.j2",
-    variables={"hostname": "SW-01", "vlan_list": "10 20 30"},
+    variables={"hostname": "SW-01", "vlan_list": "10 20 30", "admin_password": "YourStrongPass@2026"},
     backup=True,
-    dry_run=True          # 关键参数
+    dry_run=True,
+    allow_dangerous=False,
+    auto_rollback_on_failure=False,
 )
 response = adapter.execute(request)
 
-if response.data.get("status") == "skipped":
-    print("配置无变化，无需部署")
+if not response.success:
+    print("失败/阻断:", response.message, response.data)
+elif response.data.get("status") == "skipped":
+    print("配置意图已满足，无需部署")
 elif response.data.get("status") == "dry_run":
     print("Dry-Run 完成，可安全执行真实部署")
 ```
@@ -288,18 +319,22 @@ elif response.data.get("status") == "dry_run":
 
 ## 注意事项与限制
 
-- 目前以 **Console（串口）** 为主，SSH 支持处于实验阶段（首次改密流程）
-- 部署操作具有破坏性，建议始终开启 `backup=True`
-- 密码通过参数传入，**绝不硬编码**。CLI 方式可能泄露到 shell 历史，推荐使用环境变量或 `AgentAdapter` + `getpass`。
-- 部分高级特性（如多设备并发）尚未实现
+- **配置主路径是 Console**；SSH 用于后续批量管理（backup/command），不是开局改配置的首选
+- Console 与 SSH 的 VRP **命令相同**，差异只在传输层
+- **务必**传 `admin_password`（模板无默认口令；Jinja2 StrictUndefined）
+- 部署具有破坏性：建议 `backup=True`，先 `dry_run=True`
+- 密码勿硬编码；CLI `--password` 可能进 shell 历史
+- 推荐显式 `DeviceInfo.connection_type`（`console` / `ssh`）
+- 批量设备清单见 `configs/devices.example.yaml`，勿提交真实密码
 
 ## 相关文档
 
-- `docs/00-overview.md` — 项目整体概览
-- `README.md` — 项目概览与快速开始
-- `agent.md` — 完整开发路线图（已完成 1-7 阶段）
-- `docs/` — 各模块详细 API 文档（01-console.md ~ 09-ssh.md）
-- `tests/` — Mock 测试用例
+- `docs/00-overview.md` — 项目整体概览与场景分工
+- `docs/09-ssh.md` — SSH 首次改密
+- `docs/10-batch.md` — SSH 批量管理（清单 / backup / command）
+- `README.md` — 快速开始
+- `docs/06-deploy.md` — 部署（Console 主路径）
+- `tests/` — Mock 测试
 
 ## 许可证
 

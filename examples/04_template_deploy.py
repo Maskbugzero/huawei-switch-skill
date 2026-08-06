@@ -20,6 +20,7 @@ def main():
         template="access_switch.j2",
         variables={
             "hostname": "SW-01",
+            "admin_password": "YourStrongPass@2026",
             "vlan_list": "10 20 30",
             "management_vlan": 1,
             "management_ip": "192.168.1.10/24",

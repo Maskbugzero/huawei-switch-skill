@@ -14,7 +14,7 @@ undo https server enable
 
 {# 用户管理 #}
 aaa
- local-user admin password irreversible-cipher {{ admin_password | default('Admin@2026') }}
+ local-user admin password irreversible-cipher {{ admin_password }}
  local-user admin privilege level 15
  local-user admin service-type ssh telnet
  quit

@@ -81,7 +81,9 @@ cython_debug/
 backups/
 logs/
 reports/
-configs/
+# 本地设备清单（含密码）；保留 example
+configs/*
+!configs/devices.example.yaml
 
 # 临时文件与打包文件
 *.log

@@ -9,7 +9,15 @@
 
 **Skill 定位**：提供华为交换机网络自动化运维的标准化能力封装，而非自主 Agent。
 
-参考历史项目风格，采用模块化架构设计。
+### 场景分工（重要）
+
+| 你要做什么 | 用什么 |
+|------------|--------|
+| 串口开局、改配置、模板部署 | **Console**（主路径） |
+| 多台已纳管设备备份 / 跑命令 / 巡检 | **SSH 批量管理** |
+| 出厂首次登录改密 | `SSHFirstConnect` |
+
+Console 与 SSH **只是连接方式不同，VRP 命令相同**。当前配置能力做在 Console 上；SSH 面向后续批量运维。
 
 ## 项目状态
 
@@ -87,8 +95,8 @@ with Connection(port="COM4", password="xxx") as conn:
     engine = DeploymentEngine()
     report = engine.deploy(
         connection=conn,
-        template="base_switch.j2",
-        variables={"hostname": "SW-01", "vlan_list": "10 20 30"},
+        template="access_switch.j2",
+        variables={"hostname": "SW-01", "vlan_list": "10 20 30", "admin_password": "YourStrongPass@2026"},
         device_name="SW-01"
     )
     print(report)
@@ -122,24 +130,14 @@ huawei-switch-skill/
 
 ## 最近改进（2026-08）
 
-- **部署引擎重大增强**：
-  - `DeploymentPlanner` 全面升级（去重、分类、生成回滚计划、智能过滤危险命令）
-  - 幂等性检查返回详细差异摘要（含示例命令）
-  - 支持配置危险命令检测（`dangerous_keywords` 参数）
-  - 部署报告新增 `planned_steps_count`、`diff_summary`、`warnings` 等字段
-  - 失败时自动提供建议的 `undo` 命令
-
-- **SSH 模块一致性改进**：
-  - `SSHDevice` 迁移至 Pydantic
-  - 新增 `SSHChangePasswordResult` 模型
-  - `SSHFirstConnect` 新增 `get_summary()`、`is_connected`、`get_connection_info()` 方法
-  - 大量 `print` 替换为结构化日志
-
-- **测试覆盖大幅提升**：
-  - 新增针对 planner、deployer 失败场景、SSH 的多项单元测试
-  - 测试总数提升至 51+
-
-- Pydantic 模型全面升级、`AgentAdapter` 异常处理优化等
+- **部署引擎安全默认**：
+  - 幂等：意图子集匹配（非整机全量相等）
+  - 危险命令默认 `blocked`（需 `allow_dangerous=True`）
+  - 自动回滚默认关闭（实验性）
+  - `AgentResponse.success` 随 `status` 正确反映失败/阻断
+  - 主路径经 `CommandExecutor` 做错误检测
+- **模板**：`admin_password` 必填，无弱默认口令
+- 测试覆盖失败路径与 SSH 探测启发式
 
 ## 测试
 
@@ -184,11 +182,9 @@ python -m pytest tests/ -v
 
 ## 后续计划
 
-- 继续丰富 `examples/ (9 个示例)` 目录中的 Skill 使用案例
-- 完善 `AgentAdapter` 的更多 action 支持
-- 支持 SSH Transport（已实现首次连接 + 强制改密）
-- 丰富模板库
-- 第八阶段：图形界面（可选）
+- 丰富 SSH 批量管理（并发、结果汇总、与 DeploymentEngine 统一命令通道）
+- 继续完善 `examples/` 与模板库
+- 可选：图形界面
 
 ## 参考
 

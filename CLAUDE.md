@@ -5,11 +5,21 @@
 
 ## 项目概述
 
-`huawei-switch-skill` 是一个企业级的 **华为 VRP 交换机网络自动化 Skill**，专门设计为供 Claude Code、Hermes 等 LLM Agent 系统调用的底层执行器。
+`huawei-switch-skill` 是供 Claude Code / Hermes 等调用的 **华为 VRP 网络自动化 Skill**。
 
-**核心定位**：提供华为交换机 Console（串口）自动化运维的完整能力封装，而非自主 Agent。
+**场景分工（写代码时务必遵守）**：
 
-**已完成阶段**：agent.md（历史文档）路线图第 1~7 阶段全部完成。
+1. **Console = 配置主路径**  
+   开局、改配置、模板 deploy、完整 `DeploymentEngine` / 幂等 / 危险命令策略。
+2. **SSH = 批量管理通道**  
+   已纳管设备的多机 backup、command、后续巡检；清单见 `configs/devices.example.yaml`，实现见 `src/ssh/batch.py`。
+3. **命令语义一致**  
+   Console/SSH 只是 transport，不要为 SSH 另写一套 VRP CLI 语义；批量能力应复用 `backup` / 错误检测等模块。
+4. **SSHFirstConnect**  
+   仅首次改密，独立于主配置流。
+
+**不要**：把生产改配置默认走到 SSH deploy。  
+**要做**：新配置特性优先落在 Console 路径；批量能力优先 SSH + 清单。
 
 ```
 huawei-switch-skill/
@@ -110,12 +120,16 @@ response = adapter.execute(request)
 
 ## 核心新特性（2026-08）
 
-### 1. 幂等部署 + Dry-Run 支持（已大幅增强）
-- 部署前自动比对当前配置与目标配置
-- 配置无差异时自动返回 `status="skipped"`
-- 支持 `dry_run=True` 仅模拟执行
-- 新增 `diff_summary`（含示例命令）、`planned_steps_count`、`warnings`
-- 失败时提供建议的 `undo` 命令
+### 1. 幂等部署 + Dry-Run + 安全默认
+- 部署前做**意图子集匹配**（目标行 ⊆ 当前配置 → `skipped`）
+- `dry_run=True` 仅模拟
+- 危险命令默认 `blocked`；`allow_dangerous=True` 才放行
+- `auto_rollback_on_failure` **默认 False**（逐行重放备份为实验性）
+- Adapter：`success` 仅在 status ∈ {success, skipped, dry_run} 时为 True
+- 下发走 `CommandExecutor`（错误检测）
+- SSH deploy 同样默认 blocked + Error 检测；连接在 `finally` 断开
+- `AgentRequest.allow_dangerous` / `auto_rollback_on_failure` 为一等字段
+- 异常映射到 `CON*` / `CMD*` / `TPL*` / `DEP*` / `APT*` 错误码
 
 ### 2. DeploymentPlanner（全面增强）
 - 支持去重、分类、生成回滚计划

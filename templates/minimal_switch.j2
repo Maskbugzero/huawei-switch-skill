@@ -6,7 +6,7 @@ sysname {{ hostname | default('Test-SW') }}
 
 {# 最小用户配置 #}
 aaa
- local-user admin password irreversible-cipher {{ admin_password | default('Test@2026') }}
+ local-user admin password irreversible-cipher {{ admin_password }}
  local-user admin privilege level 15
  local-user admin service-type ssh telnet
  quit

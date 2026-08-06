@@ -1,0 +1,28 @@
+# Example device inventory for SSH batch management.
+# Copy to devices.yaml and fill in real values. Do NOT commit real passwords.
+#
+#   copy configs\devices.example.yaml configs\devices.yaml
+#
+# Prefer password_env so secrets stay in the environment:
+#   set SW_ACCESS_01_PASS=...
+
+defaults:
+  username: admin
+  port: 22
+  device_type: huawei_vrp
+
+devices:
+  - name: SW-ACCESS-01
+    host: 10.0.0.11
+    password: "change-me"
+    # password_env: SW_ACCESS_01_PASS
+
+  - name: SW-ACCESS-02
+    host: 10.0.0.12
+    password: "change-me"
+
+  - name: SW-AGG-01
+    host: 10.0.0.1
+    username: admin
+    port: 22
+    password: "change-me"

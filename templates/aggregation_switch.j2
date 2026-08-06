@@ -10,7 +10,7 @@ telnet server enable
 undo http server enable
 
 aaa
- local-user admin password irreversible-cipher {{ admin_password | default('Agg@2026') }}
+ local-user admin password irreversible-cipher {{ admin_password }}
  local-user admin privilege level 15
  local-user admin service-type ssh telnet
  quit

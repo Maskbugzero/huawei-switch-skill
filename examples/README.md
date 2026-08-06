@@ -22,9 +22,11 @@
 
 | 文件 | 说明 |
 |------|------|
-| `05_ssh_first_connect.py` | SSH 首次连接强制改密（目前不通过 AgentAdapter） |
+| `05_ssh_first_connect.py` | SSH 首次连接强制改密 |
+| `07_ssh_via_agent_adapter.py` | 单台 SSH backup/command |
+| `09_ssh_batch.py` | **SSH 批量管理**（清单 backup/command） |
 
-**说明**：此示例属于特殊能力，独立于 AgentAdapter，适用于需要 SSH 首次登录改密的场景。
+**场景分工**：Console = 配置主路径；SSH 批量 = 已纳管多设备运维。见 `docs/10-batch.md`。
 
 ---
 

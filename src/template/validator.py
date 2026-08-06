@@ -11,7 +11,7 @@ from typing import Any, Dict, List
 class TemplateValidator:
     """模板变量校验器。"""
 
-    REQUIRED_VARS = ["hostname"]
+    REQUIRED_VARS = ["hostname", "admin_password"]
 
     def validate(self, variables: Dict[str, Any]) -> List[str]:
         """校验必要变量。"""

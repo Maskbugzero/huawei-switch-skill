@@ -8,7 +8,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from jinja2 import Environment, FileSystemLoader, Template
+from jinja2 import Environment, FileSystemLoader, StrictUndefined, Template
 
 from src.console.logger import get_logger
 
@@ -23,6 +23,7 @@ class TemplateRenderer:
             loader=FileSystemLoader(template_dir),
             trim_blocks=True,
             lstrip_blocks=True,
+            undefined=StrictUndefined,
         )
 
     def render(self, template_name: str, variables: Dict[str, Any]) -> str:

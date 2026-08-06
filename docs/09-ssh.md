@@ -1,65 +1,70 @@
-# 09 - SSH 连接模块（规划中）
+# 09 - SSH 模块
 
-> **注意**：请使用项目 `.venv` 虚拟环境运行本模块（详见 `SKILL.md`）。
+> 使用项目 `.venv`（见 `SKILL.md`）。
 
-## 目标
-支持通过 SSH 连接华为交换机，实现与 Console 一致的自动化能力。
+## 定位
 
-## 已实现（初期）
-- `SSHFirstConnect`：SSH 首次连接 + 强制修改密码流程
-  - 自动接受主机指纹
-  - 处理 “The password needs to be changed” 交互
-  - 改密成功后重新验证登录
-  - 改密后自动执行配置备份（使用 Netmiko 作为过渡）
+Console 与 SSH **只是连接方式不同，VRP 命令相同**。
 
-## 文件
-- `src/ssh/first_connect.py`：`SSHFirstConnect` + `SSHDevice`
-- `src/ssh/__init__.py`
+本仓库中 SSH 承担两类职责：
 
-## 核心 API（当前版本）
+| 能力 | 模块 | 何时用 |
+|------|------|--------|
+| 首次登录强制改密 | `SSHFirstConnect` | 设备刚上线、系统要求改密 |
+| **批量管理** | `BatchSSHManager` | 多台已纳管设备 backup / command |
 
-```python
-@dataclass
-class SSHDevice:
-    host: str
-    username: str = "admin"
-    old_password: str = ""
-    new_password: str = ""
-    port: int = 22
+**改配置、模板部署的主路径仍是 Console。**  
+单台 SSH backup/command 也可经 `AgentAdapter` + `connection_type="ssh"`。
 
-class SSHFirstConnect:
-    def __init__(self, device: SSHDevice, timeout: int = 15):
-        ...
+批量管理详见 **[10-batch.md](./10-batch.md)**。
 
-    def change_password_and_verify(self) -> bool:
-        """执行首次连接 + 改密 + 验证"""
-        ...
-```
+## 已实现
 
-## 典型用法示例
+### 1. 首次改密 — `SSHFirstConnect`
 
-### SSH 首次改密
+- 自动接受主机指纹
+- 处理 “password needs to be changed”
+- 改密后验证登录
+- 可选改密后备份（netmiko）
+
 ```python
 from src.ssh import SSHFirstConnect, SSHDevice
 
 device = SSHDevice(
-    host="10.207.8.117",
-    username="admins",
-    old_password="phar@2021.SX",
-    new_password="Phar@2021.sx"
+    host="10.0.0.1",
+    username="admin",
+    old_password="old",
+    new_password="new",
 )
-
-ssh_tool = SSHFirstConnect(device)
-success = ssh_tool.change_password_and_verify()
-print("改密结果:", success)
+ok = SSHFirstConnect(device).change_password_and_verify()
 ```
 
-## 后续计划
-- 实现 `SSHTransport`，与 `SerialTransport` 统一接口
-- 让 `Connection` 类支持 `transport="ssh"`
-- 在 `AgentAdapter` 中支持 SSH 连接方式
-- 完善错误码和重试机制
+### 2. 批量管理 — `BatchSSHManager`
 
-## 验收标准（阶段目标）
-- 能够通过 SSH 完成首次连接 + 强制改密 + 验证
-- 改密后可正常执行配置备份和命令
+见 `docs/10-batch.md` 与 `configs/devices.example.yaml`。
+
+### 3. AgentAdapter 单台 SSH
+
+```python
+DeviceInfo(port="10.0.0.1", password="xxx", connection_type="ssh")
+# action: backup | command |（deploy 非主推）
+```
+
+## 文件
+
+- `src/ssh/first_connect.py`
+- `src/ssh/batch.py` — 清单加载 + 批量 backup/command
+- `src/ssh/inventory.py` — YAML 设备清单模型
+- `configs/devices.example.yaml`
+
+## 演进方向
+
+1. 批量结果汇总报告、失败重试
+2. 可选并发（线程池），注意设备管理面压力
+3. 与 Console 共用统一 `send_command` 抽象后，批量配置可接同一 `DeploymentEngine`
+4. 密钥/保险库对接，避免明文密码进清单
+
+## 安全
+
+- 示例清单勿含真实生产密码；用环境变量或本地未跟踪的 `configs/devices.yaml`
+- 批量 command 同样可能有破坏性，默认应对只读命令（`display ...`）

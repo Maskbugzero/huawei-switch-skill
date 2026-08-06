@@ -1,96 +1,89 @@
 # 项目概览
 
-`huawei-switch-skill` 是一个企业级的华为 VRP 交换机 Console 自动化 Skill。
-
-它封装了从串口连接、命令执行、配置备份、解析、模板渲染、部署到校验的完整生命周期能力，可被 Claude Code、Hermes 或其他上层 Agent 系统直接调用。
+`huawei-switch-skill` 是企业级华为 VRP 交换机自动化 Skill，供 Claude Code、Hermes 或其它 Agent 调用。
 
 ## 环境要求（重要）
 
-本项目**必须**使用自带的虚拟环境 `.venv`，以确保依赖隔离。
-
-**规则**：
-- 所有 Python 命令必须通过 `.venv` 执行
-- 如果 `.venv` 不存在，需先创建再使用
-- 禁止直接使用系统全局 Python
-
-**常用命令**：
+必须使用项目 `.venv`：
 
 ```powershell
-# 直接调用 venv 内的 Python（推荐）
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 .\.venv\Scripts\python.exe -m pytest tests/ -v
-
-# 激活虚拟环境后使用
-.\.venv\Scripts\Activate.ps1
-python main.py backup --port COM4 --password xxx --device SW-01
 ```
 
----
+## 核心定位与场景分工
 
-## 核心定位
+- **Skill 而非 Agent**：标准化能力封装
+- **Console = 配置主路径**：单台开局、改配置、模板部署、校验
+- **SSH = 批量管理通道**：已纳管多设备 backup / command / 后续巡检
+- **命令相同、连接不同**：Console 与 SSH 都是 VRP CLI，差异只在 transport
 
-- **Skill 而非 Agent**：提供标准化能力封装，供上层 Agent 调用
-- **Console 优先**：最稳定可靠的接入方式
-- **模块化设计**：每个模块可独立使用
+| 场景 | 推荐入口 |
+|------|----------|
+| 串口配置 / deploy | `Connection` + `DeploymentEngine` 或 `AgentAdapter` + `connection_type="console"` |
+| 多机备份 / 批量命令 | `BatchSSHManager`（`src/ssh/batch.py`）+ `configs/devices.yaml` |
+| 首次改密 | `SSHFirstConnect` |
+| 单台 SSH 临时 backup/command | `AgentAdapter` + `connection_type="ssh"` |
 
 ## 主要能力
 
-| 能力模块       | 对应目录     | 核心功能                     |
-|----------------|--------------|------------------------------|
-| 串口通信       | `console/`   | 连接、登录、关闭分页         |
-| 命令执行       | `command/`   | 错误检测、自动 save          |
-| 配置备份       | `backup/`    | 采集 + 结构化归档            |
-| 配置解析       | `parser/`    | 转换为结构化 Python 对象     |
-| 模板渲染       | `template/`  | Jinja2 模板                  |
-| 自动部署       | `deploy/`    | 渲染 + 下发 + 回滚           |
-| 配置校验       | `verify/`    | 一致性检查 + 报告生成        |
-| SSH 首次改密   | `ssh/`       | 首次连接强制修改密码         |
-| 统一入口       | `agent/`     | `AgentAdapter` 调用接口      |
+| 模块 | 目录 | 角色 |
+|------|------|------|
+| 串口通信 | `console/` | 配置主路径连接层 |
+| 命令执行 | `command/` | 错误检测（主路径已接入 deploy） |
+| 配置备份 | `backup/` | 采集与归档（Console/SSH/批量共用导出） |
+| 解析 / 模板 / 部署 / 校验 | `parser/` `template/` `deploy/` `verify/` | 配置生命周期（deploy 推荐 Console） |
+| SSH | `ssh/` | 首次改密 + **批量管理** |
+| 统一入口 | `agent/` | `AgentAdapter` |
 
-## 推荐调用方式
+## 推荐调用
+
+### Console 配置（主路径）
 
 ```python
 from src.agent import AgentAdapter, AgentRequest, DeviceInfo
 
 adapter = AgentAdapter()
-request = AgentRequest(
-    action="backup",
-    device=DeviceInfo(port="COM4", password="xxx"),
-    variables={"device_name": "SW-01"}
-)
-response = adapter.execute(request)
+response = adapter.execute(AgentRequest(
+    action="deploy",
+    device=DeviceInfo(port="COM4", password="xxx", connection_type="console"),
+    template="access_switch.j2",
+    variables={"hostname": "SW-01", "admin_password": "YourStrongPass@2026"},
+    dry_run=True,
+))
+```
+
+### SSH 批量备份（批量管理）
+
+```python
+from src.ssh.batch import BatchSSHManager
+
+mgr = BatchSSHManager.from_yaml("configs/devices.yaml")
+report = mgr.backup_all()
+print(report.summary())
 ```
 
 ## 项目结构
 
 ```
 huawei-switch-skill/
+├── configs/          # 设备清单示例（勿提交真实密码）
 ├── src/
-│   ├── console/      # 串口通信核心
-│   ├── command/      # 命令执行引擎
-│   ├── backup/       # 配置采集与导出
-│   ├── parser/       # 配置解析器
-│   ├── template/     # Jinja2 模板
-│   ├── deploy/       # 部署与回滚
-│   ├── verify/       # 配置校验
-│   ├── agent/        # Skill 统一入口
-│   └── ssh/          # SSH 首次改密（实验）
-├── examples/         # 使用示例
-├── docs/             # 详细文档
-├── templates/        # Jinja2 模板文件
-└── tests/            # Mock 测试
+│   ├── console/      # 配置主路径
+│   ├── command/
+│   ├── backup/
+│   ├── deploy/       # 推荐仅 Console 生产部署
+│   ├── agent/
+│   └── ssh/          # first_connect + batch
+├── docs/             # 含 09-ssh.md、10-batch.md
+├── examples/
+└── tests/
 ```
 
 ## 相关文档
 
-- `SKILL.md` — Skill 元数据与快速开始
-- `README.md` — 项目介绍
-- `agent.md` — 开发路线图
-- `docs/01-console.md` ~ `docs/09-ssh.md` — 各模块详细说明
-- `CHANGELOG.md` — 变更历史
-
-## 当前状态
-
-- 1~7 阶段核心功能已完成
-- Skill 化程度高，可直接被上层系统调用
-- 支持 Mock 测试，无硬件环境可用
+- `SKILL.md` — Skill 定义
+- `docs/06-deploy.md` — 部署（Console）
+- `docs/09-ssh.md` — 首次改密
+- `docs/10-batch.md` — 批量管理
+- `CHANGELOG.md`

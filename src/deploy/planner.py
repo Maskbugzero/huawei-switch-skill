@@ -12,15 +12,23 @@ class DeploymentPlanner:
     """部署步骤规划器。"""
 
     def plan(self, config_text: str) -> List[str]:
-        """生成部署步骤列表（去重 + 过滤注释）。"""
-        steps = []
-        seen = set()
+        """
+        生成部署步骤列表。
+
+        - 去除空行与行内/整行注释
+        - **保留**跨 interface 重复的子命令（禁止全局去重）
+        - 仅折叠**连续**完全相同的行（防止误粘贴放大）
+        """
+        steps: List[str] = []
+        prev: str | None = None
         for line in config_text.splitlines():
-            # 去除行内注释
             clean_line = line.split("#")[0].strip()
-            if clean_line and clean_line not in seen:
-                seen.add(clean_line)
-                steps.append(clean_line)
+            if not clean_line:
+                continue
+            if clean_line == prev:
+                continue
+            steps.append(clean_line)
+            prev = clean_line
         return steps
 
     def plan_with_categories(self, config_text: str) -> dict:

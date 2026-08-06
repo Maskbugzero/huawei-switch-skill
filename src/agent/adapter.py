@@ -17,19 +17,81 @@ AgentAdapter.execute() 来使用本 Skill 的各项能力。
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 import paramiko
+from jinja2 import TemplateNotFound, UndefinedError
 from netmiko import ConnectHandler
 
-from src.console import Connection
+from src.console import (
+    Connection,
+    ConsoleDisconnect,
+    ConsoleTimeout,
+    AuthenticationError,
+)
 from src.agent.error_codes import (
-    APT001, APT002, CON001, CON003,
+    APT001,
+    APT002,
+    CMD001,
+    CON003,
+    CON004,
+    DEP001,
+    TPL001,
+    TPL002,
+    VAL001,
 )
 from src.agent.request import AgentRequest, AgentResponse
 from src.console.logger import get_logger
+from src.command import CommandExecutor, ErrorDetector
+from src.command.exceptions import CommandExecutionError
+from src.deploy.deployer import (
+    DEFAULT_DANGEROUS_KEYWORDS,
+    _line_is_dangerous,
+    configs_intent_differs,
+)
+from src.deploy.planner import DeploymentPlanner
+from src.template import TemplateRenderer
 
 logger = get_logger("agent")
+
+_SUCCESS_STATUSES = frozenset({"success", "skipped", "dry_run"})
+
+
+def _map_exception_code(exc: BaseException) -> str:
+    """将异常映射到统一错误码。"""
+    if isinstance(exc, AuthenticationError):
+        return CON003.code
+    if isinstance(exc, (ConsoleDisconnect, ConsoleTimeout)):
+        return CON004.code
+    if isinstance(exc, paramiko.AuthenticationException):
+        return CON003.code
+    if isinstance(exc, CommandExecutionError):
+        return CMD001.code
+    if isinstance(exc, TemplateNotFound):
+        return TPL001.code
+    if isinstance(exc, UndefinedError):
+        return TPL002.code
+    if isinstance(exc, (PermissionError, FileNotFoundError, ValueError)):
+        return APT001.code
+    return DEP001.code
+
+
+def _response_from_deploy_report(report: Dict[str, Any]) -> AgentResponse:
+    status = report.get("status")
+    ok = status in _SUCCESS_STATUSES
+    code = None
+    if not ok:
+        if status == "blocked":
+            code = DEP001.code
+        else:
+            code = DEP001.code
+    return AgentResponse(
+        success=ok,
+        code=code,
+        data=report,
+        message=report.get("reason") or report.get("error") or "",
+        error=None if ok else (report.get("error") or report.get("reason")),
+    )
 
 
 class AgentAdapter:
@@ -39,19 +101,6 @@ class AgentAdapter:
     这是使用 huawei-switch-skill Skill 的推荐方式。
     所有操作都通过 AgentRequest / AgentResponse 进行标准化交互，
     便于上层 Agent 系统集成。
-
-    支持的 action 及参数说明：
-        backup:
-            params: { port, password, device_name }
-        deploy:
-            params: { port, password, template, variables, device_name, backup_before_deploy }
-        command:
-            params: { port, password, command }
-        validate:
-            params: { port, password, config_path? }
-
-    详细示例请参考：
-        examples/03_using_agent_adapter.py
     """
 
     SUPPORTED_ACTIONS = {"deploy", "backup", "command", "validate"}
@@ -61,14 +110,6 @@ class AgentAdapter:
         执行 Skill 请求（推荐调用方式）。
 
         使用上下文管理器确保连接始终关闭（修复资源泄漏）。
-        支持所有 action，包括 validate。
-        使用 request.device 统一处理连接信息（与 request.py / tests 一致）。
-
-        Args:
-            request: AgentRequest 对象（使用 DeviceInfo 而非旧 params 字典）
-
-        Returns:
-            AgentResponse: 标准化响应
         """
         if request.action not in self.SUPPORTED_ACTIONS:
             return AgentResponse(
@@ -77,13 +118,11 @@ class AgentAdapter:
                 message=f"不支持的操作: {request.action}",
             )
 
-        # 检测连接类型：SSH 或 Console
         is_ssh = request.device.is_ssh()
+        password_value = request.device.password.get_secret_value()
 
-        # 基本参数校验（根据连接类型区分）
         if is_ssh:
-            # SSH 模式：需要 password，host 或 port 至少有一个
-            if not request.device.password.get_secret_value():
+            if not password_value:
                 return AgentResponse(
                     success=False,
                     code=APT001.code,
@@ -96,8 +135,7 @@ class AgentAdapter:
                     message="SSH 模式需要 host 或 port",
                 )
         else:
-            # Console 模式：需要 port 和 password
-            if not request.device.port or not request.device.password:
+            if not request.device.port or not password_value:
                 return AgentResponse(
                     success=False,
                     code=APT001.code,
@@ -106,80 +144,40 @@ class AgentAdapter:
 
         device_name = request.variables.get("device_name", "unknown")
 
-        # validate 不需要真实连接，可提前处理
         if request.action == "validate":
-            from pathlib import Path
+            return self._execute_validate(request)
 
-            from src.verify import ConfigVerifier
-
-            verifier = ConfigVerifier()
-
-            before = request.variables.get("before_config", "")
-            after = request.variables.get("after_config", "")
-            expected = request.variables.get("expected", {})
-
-            before_path = request.variables.get("before_config_path")
-            after_path = request.variables.get("after_config_path")
-
-            def _safe_read_config(path_str: str) -> str:
-                """安全读取配置文件，防止路径遍历等安全问题。"""
-                p = Path(path_str).resolve()
-                # 限制只能读取当前工作目录下的文件，或 backups/ 目录下的文件
-                cwd = Path.cwd().resolve()
-                allowed_dirs = [cwd, cwd / "backups"]
-
-                is_allowed = any(
-                    str(p).startswith(str(d)) for d in allowed_dirs
-                )
-
-                if not p.exists() or not p.is_file():
-                    raise FileNotFoundError(f"配置文件不存在或不是文件: {path_str}")
-                if not is_allowed:
-                    raise PermissionError(f"不允许访问该路径: {path_str}")
-
-                with open(p, "r", encoding="utf-8") as f:
-                    return f.read()
-
-            try:
-                if before_path:
-                    before = _safe_read_config(before_path)
-                if after_path:
-                    after = _safe_read_config(after_path)
-            except Exception as e:
-                return AgentResponse(
-                    success=False,
-                    code=APT001.code,
-                    message=f"配置文件读取失败: {e}",
-                )
-
-            if before or after:
-                report = verifier.verify(before, after, expected)
-            else:
-                report = {"status": "skipped", "reason": "no config provided for validation"}
-
-            return AgentResponse(success=True, data={"validation_report": report})
-
-        # SSH 连接分支
         if is_ssh:
             return self._execute_via_ssh(request, device_name)
 
-        # Console 连接分支
         try:
-            # 使用上下文管理器确保自动 disconnect（即使异常也安全）
             with Connection(
                 port=request.device.port,
-                password=request.device.password.get_secret_value()
+                password=password_value,
             ) as conn:
                 if request.action == "backup":
                     from src.backup import ConfigCollector, ConfigExporter
+
                     collector = ConfigCollector(conn)
                     data = collector.collect_all()
                     exporter = ConfigExporter()
                     path = exporter.export_backup(device_name, data)
                     return AgentResponse(success=True, data={"backup_path": str(path)})
 
-                elif request.action == "deploy":
+                if request.action == "deploy":
                     from src.deploy import DeploymentEngine
+
+                    # variables 中的同名键可覆盖（向后兼容），顶层字段优先被显式使用
+                    allow_dangerous = request.allow_dangerous or bool(
+                        request.variables.get("allow_dangerous", False)
+                    )
+                    auto_rollback = request.auto_rollback_on_failure or bool(
+                        request.variables.get("auto_rollback_on_failure", False)
+                    )
+                    # save 默认 True；variables 可覆盖
+                    save = request.save
+                    if "save" in request.variables:
+                        save = bool(request.variables.get("save"))
                     engine = DeploymentEngine()
                     report = engine.deploy(
                         connection=conn,
@@ -188,21 +186,47 @@ class AgentAdapter:
                         backup=request.backup,
                         device_name=device_name,
                         dry_run=request.dry_run,
+                        allow_dangerous=allow_dangerous,
+                        auto_rollback_on_failure=auto_rollback,
+                        save=save,
                     )
-                    return AgentResponse(success=True, data=report)
+                    return _response_from_deploy_report(report)
 
-                elif request.action == "command":
-                    output = conn.send_command(request.variables.get("command", ""))
+                if request.action == "command":
+                    cmd = request.variables.get("command", "")
+                    if not cmd:
+                        return AgentResponse(
+                            success=False,
+                            code=APT001.code,
+                            message="command action 缺少 command 参数",
+                        )
+                    executor = CommandExecutor(conn)
+                    output = executor.send_command(cmd)
                     return AgentResponse(success=True, data={"output": output})
 
-                # 理论上不会到达这里
                 return AgentResponse(success=True)
 
         except (ConsoleDisconnect, ConsoleTimeout, AuthenticationError) as e:
             logger.error(f"Agent 执行失败（连接异常）: {e}")
             return AgentResponse(
                 success=False,
-                code=CON003.code,
+                code=_map_exception_code(e),
+                message=str(e),
+                error=str(e),
+            )
+        except CommandExecutionError as e:
+            logger.error(f"Agent 命令执行失败: {e}")
+            return AgentResponse(
+                success=False,
+                code=CMD001.code,
+                message=str(e),
+                error=str(e),
+            )
+        except (TemplateNotFound, UndefinedError) as e:
+            logger.error(f"Agent 模板错误: {e}")
+            return AgentResponse(
+                success=False,
+                code=_map_exception_code(e),
                 message=str(e),
                 error=str(e),
             )
@@ -212,29 +236,79 @@ class AgentAdapter:
             logger.error(f"Agent 执行失败: {e}")
             return AgentResponse(
                 success=False,
-                code=CON003.code,
+                code=_map_exception_code(e),
                 message=str(e),
                 error=str(e),
             )
+
+    def _execute_validate(self, request: AgentRequest) -> AgentResponse:
+        from pathlib import Path
+
+        from src.verify import ConfigVerifier
+
+        verifier = ConfigVerifier()
+        before = request.variables.get("before_config", "")
+        after = request.variables.get("after_config", "")
+        expected = request.variables.get("expected", {})
+        before_path = request.variables.get("before_config_path")
+        after_path = request.variables.get("after_config_path")
+
+        def _safe_read_config(path_str: str) -> str:
+            p = Path(path_str).expanduser().resolve(strict=False)
+            cwd = Path.cwd().resolve()
+            allowed_roots = [cwd, (cwd / "backups").resolve()]
+
+            def _is_relative_to(path: Path, root: Path) -> bool:
+                try:
+                    path.relative_to(root)
+                    return True
+                except ValueError:
+                    return False
+
+            if not any(_is_relative_to(p, root) for root in allowed_roots):
+                raise PermissionError(f"不允许访问该路径: {path_str}")
+            if not p.exists() or not p.is_file():
+                raise FileNotFoundError(f"配置文件不存在或不是文件: {path_str}")
+
+            with open(p, "r", encoding="utf-8") as f:
+                return f.read()
+
+        try:
+            if before_path:
+                before = _safe_read_config(before_path)
+            if after_path:
+                after = _safe_read_config(after_path)
+        except Exception as e:
+            return AgentResponse(
+                success=False,
+                code=APT001.code,
+                message=f"配置文件读取失败: {e}",
+            )
+
+        if before or after:
+            report = verifier.verify(before, after, expected)
+        else:
+            report = {"status": "skipped", "reason": "no config provided for validation"}
+
+        ok = report.get("status") != "fail"
+        return AgentResponse(
+            success=ok,
+            code=None if ok else VAL001.code,
+            data={"validation_report": report},
+            message="" if ok else "validation failed",
+            error=None if ok else "validation failed",
+        )
 
     def _execute_via_ssh(self, request: AgentRequest, device_name: str) -> AgentResponse:
         """
         通过 SSH 执行 Skill 请求。
 
-        支持的操作：
-        - backup: 使用 netmiko 采集配置并备份
-        - command: 直接执行单条命令
-        - deploy: 简化支持（下发配置），完整 DeploymentEngine 需 Connection 对象
-        - validate: 不应到达此分支（已在 execute 中提前处理）
-
-        Args:
-            request: AgentRequest 对象
-            device_name: 设备名称
-
-        Returns:
-            AgentResponse: 标准化响应
+        deploy 路径对齐 Console 安全默认：
+        - 危险命令默认 blocked
+        - 意图子集幂等
+        - 输出 Error 检测
+        - 连接始终在 finally 中关闭
         """
-
         host = request.device.host or request.device.port
         port = request.device.port_number
         username = request.device.username
@@ -248,8 +322,8 @@ class AgentAdapter:
             "username": username,
             "password": password,
             "port": port,
-            "conn_timeout": 30,      # 连接超时 30 秒
-            "read_timeout": 30,      # 读取超时 30 秒
+            "conn_timeout": 30,
+            "read_timeout": 30,
         }
 
         conn = None
@@ -266,104 +340,54 @@ class AgentAdapter:
                         message="SSH command action 缺少 command 参数",
                     )
                 output = conn.send_command(cmd, read_timeout=30)
-                conn.disconnect()
-                return AgentResponse(success=True, data={"output": output, "transport": "ssh", "note": "SSH transport is experimental, Console mode is recommended for full features"})
-
-            elif request.action == "backup":
-                from src.backup import ConfigExporter
-
-                config = conn.send_command("display current-configuration", read_timeout=120)
-                exporter = ConfigExporter()
-                path = exporter.export_backup(device_name, {"display current-configuration": config})
-                conn.disconnect()
-                return AgentResponse(
-                    success=True,
-                    data={"backup_path": str(path), "transport": "ssh", "note": "SSH transport is experimental, Console mode is recommended for full features"}
-                )
-
-            elif request.action == "deploy":
-                # SSH deploy 的简化实现：直接下发 template 渲染后的配置
-                # 完整功能（幂等性、Dry-Run、自动回滚）需使用 Console + DeploymentEngine
-                from src.template import TemplateRenderer
-
-                template_name = request.template or "access_switch.j2"
-                renderer = TemplateRenderer()
-                target_config = renderer.render(template_name, request.variables)
-
-                # 1. 幂等性检查：采集当前配置并比对
-                try:
-                    current_config = conn.send_command("display current-configuration", read_timeout=120)
-                except Exception as e:
-                    logger.warning(f"SSH deploy 采集当前配置失败，跳过幂等性检查: {e}")
-                    current_config = None
-                    # 记录到响应中（通过后续构造的 response data）
-
-                if current_config is not None:
-                    # 简单的配置规范化比对
-                    target_lines = [l.strip() for l in target_config.splitlines() if l.strip() and not l.strip().startswith("#")]
-                    current_lines = [l.strip() for l in current_config.splitlines() if l.strip() and not l.strip().startswith("#")]
-
-                    if target_lines == current_lines:
-                        conn.disconnect()
-                        return AgentResponse(
-                            success=True,
-                            data={
-                                "status": "skipped",
-                                "reason": "no configuration changes detected (idempotency check)",
-                                "transport": "ssh",
-                            },
-                        )
-
-                if request.dry_run:
-                    conn.disconnect()
+                detector = ErrorDetector()
+                err = detector.detect(output or "")
+                if err:
                     return AgentResponse(
-                        success=True,
-                        data={
-                            "status": "dry_run",
-                            "reason": "SSH deploy dry_run 模式，未下发配置",
-                            "planned_config_length": len(target_config),
-                            "transport": "ssh",
-                        },
+                        success=False,
+                        code=CMD001.code,
+                        message=err,
+                        error=err,
+                        data={"output": output, "transport": "ssh"},
                     )
-
-                # 2. 下发配置：逐行发送（不使用 DeploymentEngine 的 planner）
-                lines = [l.strip() for l in target_config.splitlines() if l.strip() and not l.strip().startswith("#")]
-                success_count = 0
-                failed_lines = []
-                for line in lines:
-                    try:
-                        conn.send_command(line, read_timeout=30)
-                        success_count += 1
-                    except Exception as e:
-                        logger.warning(f"SSH deploy 命令执行失败: {line} -> {e}")
-                        failed_lines.append(line)
-
-                conn.disconnect()
-                status = "success" if not failed_lines else "partial"
                 return AgentResponse(
                     success=True,
                     data={
-                        "status": status,
-                        "deployed_lines": success_count,
-                        "failed_lines": failed_lines,
-                        "total_lines": len(lines),
+                        "output": output,
                         "transport": "ssh",
-                        "note": "SSH deploy 为简化实现，建议 Console 模式使用完整 DeploymentEngine（支持 planner、自动回滚）",
+                        "note": "SSH transport is experimental for full deploy features",
                     },
                 )
 
-            else:
-                if conn:
-                    conn.disconnect()
+            if request.action == "backup":
+                from src.backup import ConfigExporter
+
+                config = conn.send_command(
+                    "display current-configuration", read_timeout=120
+                )
+                exporter = ConfigExporter()
+                path = exporter.export_backup(
+                    device_name, {"display current-configuration": config}
+                )
                 return AgentResponse(
-                    success=False,
-                    code=APT002.code,
-                    message=f"SSH 模式不支持的操作: {request.action}",
+                    success=True,
+                    data={
+                        "backup_path": str(path),
+                        "transport": "ssh",
+                        "note": "SSH transport is experimental for full deploy features",
+                    },
                 )
 
+            if request.action == "deploy":
+                return self._ssh_deploy(conn, request)
+
+            return AgentResponse(
+                success=False,
+                code=APT002.code,
+                message=f"SSH 模式不支持的操作: {request.action}",
+            )
+
         except paramiko.AuthenticationException as e:
-            if conn:
-                conn.disconnect()
             logger.error(f"SSH 认证失败: {e}")
             return AgentResponse(
                 success=False,
@@ -371,19 +395,165 @@ class AgentAdapter:
                 message=f"SSH 认证失败: {e}",
                 error=str(e),
             )
+        except (TemplateNotFound, UndefinedError) as e:
+            logger.error(f"SSH 模板错误: {e}")
+            return AgentResponse(
+                success=False,
+                code=_map_exception_code(e),
+                message=str(e),
+                error=str(e),
+            )
         except Exception as e:
-            if conn:
-                try:
-                    conn.disconnect()
-                except Exception as disconnect_err:
-                    logger.warning(f"SSH 连接关闭异常: {disconnect_err}")
             if isinstance(e, (KeyboardInterrupt, SystemExit)):
                 raise
             logger.error(f"SSH 执行失败: {e}")
             return AgentResponse(
                 success=False,
-                code=CON003.code,
+                code=_map_exception_code(e),
                 message=str(e),
                 error=str(e),
             )
+        finally:
+            if conn is not None:
+                try:
+                    conn.disconnect()
+                except Exception as disconnect_err:
+                    logger.warning(f"SSH 连接关闭异常: {disconnect_err}")
 
+    def _ssh_deploy(self, conn: Any, request: AgentRequest) -> AgentResponse:
+        """SSH deploy：对齐 Console 的 blocked / 子集幂等 / Error 检测。"""
+        template_name = request.template or "access_switch.j2"
+        renderer = TemplateRenderer()
+        target_config = renderer.render(template_name, request.variables)
+
+        allow_dangerous = request.allow_dangerous or bool(
+            request.variables.get("allow_dangerous", False)
+        )
+
+        # 危险命令默认阻断
+        dangerous_commands = [
+            line.strip()
+            for line in target_config.splitlines()
+            if _line_is_dangerous(line, DEFAULT_DANGEROUS_KEYWORDS)
+        ]
+        if dangerous_commands and not allow_dangerous:
+            return _response_from_deploy_report(
+                {
+                    "status": "blocked",
+                    "reason": (
+                        "dangerous commands detected; pass allow_dangerous=True to override"
+                    ),
+                    "dangerous_commands": dangerous_commands[:20],
+                    "transport": "ssh",
+                }
+            )
+
+        # 采集当前配置 + 意图子集匹配
+        current_config: Optional[str] = None
+        try:
+            current_config = conn.send_command(
+                "display current-configuration", read_timeout=120
+            )
+        except Exception as e:
+            logger.warning(f"SSH deploy 采集当前配置失败，跳过幂等性检查: {e}")
+
+        if current_config is not None:
+            is_different, diff_summary = configs_intent_differs(
+                target_config, current_config
+            )
+            if not is_different:
+                return _response_from_deploy_report(
+                    {
+                        "status": "skipped",
+                        "reason": (
+                            "target intent already satisfied "
+                            "(interface-aware intent match)"
+                        ),
+                        "diff_summary": diff_summary,
+                        "transport": "ssh",
+                    }
+                )
+
+        if request.dry_run:
+            return _response_from_deploy_report(
+                {
+                    "status": "dry_run",
+                    "reason": "SSH deploy dry_run 模式，未下发配置",
+                    "planned_config_length": len(target_config),
+                    "transport": "ssh",
+                }
+            )
+
+        lines = DeploymentPlanner().plan(target_config)
+        detector = ErrorDetector()
+        success_count = 0
+        failed_lines: List[str] = []
+        errors: List[str] = []
+
+        for line in lines:
+            try:
+                output = conn.send_command(line, read_timeout=30)
+                err = detector.detect(output or "")
+                if err:
+                    logger.warning(f"SSH deploy 设备报错: {line} -> {err}")
+                    failed_lines.append(line)
+                    errors.append(err)
+                    break
+                success_count += 1
+            except Exception as e:
+                logger.warning(f"SSH deploy 命令执行失败: {line} -> {e}")
+                failed_lines.append(line)
+                errors.append(str(e))
+                break
+
+        if failed_lines:
+            return _response_from_deploy_report(
+                {
+                    "status": "failed",
+                    "error": errors[0] if errors else "command failed",
+                    "deployed_lines": success_count,
+                    "failed_lines": failed_lines,
+                    "total_lines": len(lines),
+                    "transport": "ssh",
+                    "note": "SSH deploy uses ErrorDetector; full planner/rollback via Console",
+                }
+            )
+
+        # 成功后默认 save（与 Console 对齐）
+        do_save = request.save
+        if "save" in request.variables:
+            do_save = bool(request.variables.get("save"))
+        if do_save and not request.dry_run:
+            try:
+                # netmiko 下 save 确认因平台而异；尽力发送
+                conn.send_command_timing("save")
+                try:
+                    conn.send_command_timing("Y")
+                except Exception:
+                    pass
+                saved = True
+            except Exception as e:
+                logger.warning(f"SSH deploy save failed: {e}")
+                return _response_from_deploy_report(
+                    {
+                        "status": "failed",
+                        "error": f"deploy succeeded but save failed: {e}",
+                        "deployed_lines": success_count,
+                        "total_lines": len(lines),
+                        "saved": False,
+                        "transport": "ssh",
+                    }
+                )
+        else:
+            saved = False
+
+        return _response_from_deploy_report(
+            {
+                "status": "success",
+                "deployed_lines": success_count,
+                "total_lines": len(lines),
+                "saved": saved if do_save else False,
+                "transport": "ssh",
+                "note": "SSH deploy simplified path; Console DeploymentEngine recommended for rollback",
+            }
+        )

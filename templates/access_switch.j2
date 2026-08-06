@@ -8,7 +8,7 @@ sysname {{ hostname | default('Access-SW') }}
 undo telnet server enable
 ssh server enable
 aaa
- local-user admin password irreversible-cipher {{ admin_password | default('Access@2026') }}
+ local-user admin password irreversible-cipher {{ admin_password }}
  local-user admin privilege level 15
  local-user admin service-type ssh
  quit

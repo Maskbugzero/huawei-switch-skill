@@ -5,7 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] - 2026-08-02
+## [Unreleased] - 2026-08-06
+
+### Fixed
+- **P0** `DeploymentPlanner.plan` no longer globally dedupes lines — multi-interface templates keep repeated subcommands (`port link-type access`, `undo shutdown`, …); only consecutive identical lines collapse
+- **P1** Deploy idempotency is **interface-aware** (per-interface body subset + global lines); stops false `skipped` when the same line exists under another interface
+- **P1** Successful deploy defaults to VRP `save` (`save=True`); report includes `saved`
+- **P1** Empty/missing current config no longer writes empty backups used for rollback (`backup_skipped`)
+- **P1** `ConfigExporter` sanitizes `device_name` (blocks `..` / path separators)
+- **P1** SSH batch `command_all`: `ErrorDetector` + default dangerous-command block (`allow_dangerous=True` to override); CLI `--allow-dangerous`
+
+### Changed
+- `AgentRequest.save` first-class field (default True)
+- SSH Adapter deploy uses `DeploymentPlanner` + interface-aware intent match + optional save
+- `InventoryDevice.password` is `SecretStr`; inventory `name` sanitized
+
+### Tests
+- **95 passed**
+
+## [0.2.0] - 2026-08-02
 
 ### Added
 - **Parser robustness**:

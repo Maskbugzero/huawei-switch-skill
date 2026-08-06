@@ -63,6 +63,7 @@ def main():
             template="access_switch.j2",
             variables={
                 "hostname": "SW-01",
+                "admin_password": "YourStrongPass@2026",
                 "vlan_list": "10 20 30",
                 "management_ip": "192.168.1.10",
                 "device_name": "SW-01"
@@ -74,14 +75,14 @@ def main():
         if deploy_response.success:
             status = deploy_response.data.get("status", "unknown")
             if status == "skipped":
-                print("⏭️  跳过部署（配置无差异）")
+                print("⏭️  跳过部署（目标意图已满足）")
             else:
                 print(f"✅ 部署成功: {status}")
                 if "diff_summary" in deploy_response.data:
                     print(f"   差异摘要: {deploy_response.data['diff_summary']}")
         else:
             logger.error(f"部署失败: {deploy_response.code} - {deploy_response.message}")
-            print(f"❌ 部署失败: {deploy_response.message}")
+            print(f"❌ 部署失败/阻断: {deploy_response.message} status={deploy_response.data.get('status')}")
 
     except Exception as e:
         logger.exception("部署操作发生未捕获异常")
@@ -98,6 +99,7 @@ def main():
             template="access_switch.j2",
             variables={
                 "hostname": "SW-01",
+                "admin_password": "YourStrongPass@2026",
                 "vlan_list": "10 20 30",
                 "management_ip": "192.168.1.10",
                 "device_name": "SW-01"

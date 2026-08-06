@@ -96,7 +96,7 @@ def main():
         action="deploy",
         device=DeviceInfo(port="COM4", password="xxx"),
         template="nonexistent_template.j2",  # 不存在的模板
-        variables={"hostname": "SW-01"},
+        variables={"hostname": "SW-01", "admin_password": "YourStrongPass@2026"},
         backup=False
     )
     response = adapter.execute(template_fail_request)

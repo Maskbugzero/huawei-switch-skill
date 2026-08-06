@@ -17,8 +17,8 @@
 
 | 变量名 | 类型 | 默认值 | 说明 |
 |--------|------|--------|------|
-| `hostname` | string | `Test-SW` | 设备主机名 |
-| `admin_password` | string | 各模板不同 | 管理员密码（明文，生产环境应使用环境变量） |
+| `hostname` | string | `Test-SW`（部分模板） | 设备主机名 |
+| `admin_password` | string | **无默认，必填** | 管理员密码（StrictUndefined，漏传则渲染失败） |
 | `vlan_list` | string | `"10 20 30"` | VLAN 列表（空格分隔） |
 
 ---
@@ -68,7 +68,7 @@
 
 ### access_switch.j2（接入层）
 
-**必需变量**：无（均有默认值）
+**必需变量**：`admin_password`（以及业务所需的 hostname 等）
 
 **常用变量**：
 - `hostname`, `admin_password`
@@ -86,7 +86,7 @@
 
 ### aggregation_switch.j2（汇聚层）
 
-**必需变量**：无（均有默认值）
+**必需变量**：`admin_password`（以及业务所需的 hostname 等）
 
 **常用变量**：
 - `hostname`, `admin_password`
@@ -102,7 +102,7 @@
 
 ### core_switch.j2（核心层）
 
-**必需变量**：无（均有默认值）
+**必需变量**：`admin_password`（以及业务所需的 hostname 等）
 
 **常用变量**：
 - `hostname`, `admin_password`
@@ -119,7 +119,7 @@
 
 ### minimal_switch.j2（快速测试）
 
-**必需变量**：无（均有默认值）
+**必需变量**：`admin_password`（以及业务所需的 hostname 等）
 
 **常用变量**：
 - `hostname`, `admin_password`

@@ -40,12 +40,24 @@ def test_agent_request_serialization():
 
 
 def test_device_info_ssh_detection():
-    """测试 DeviceInfo 的 SSH 判断功能"""
-    console_device = DeviceInfo(port="COM4", password="xxx")
-    assert console_device.is_ssh() is False
+    """测试 DeviceInfo 的 SSH / Console 判断（显式优先 + 收紧启发式）。"""
+    assert DeviceInfo(port="COM4", password="xxx").is_ssh() is False
+    assert DeviceInfo(port="/dev/ttyUSB0", password="xxx").is_ssh() is False
+    assert DeviceInfo(port="cu.usbserial", password="xxx").is_ssh() is False
 
-    ssh_device = DeviceInfo(port="10.0.0.1", password="xxx", host="10.0.0.1")
-    assert ssh_device.is_ssh() is True
+    # host 显式设置 → SSH
+    assert DeviceInfo(port="COM4", password="xxx", host="10.0.0.1").is_ssh() is True
+    # IPv4 / hostname → SSH
+    assert DeviceInfo(port="10.0.0.1", password="xxx").is_ssh() is True
+    assert DeviceInfo(port="203.0.113.10", password="xxx").is_ssh() is True
+    assert DeviceInfo(port="sw-core-01.example.com", password="xxx").is_ssh() is True
+    # connection_type 覆盖启发式
+    assert DeviceInfo(
+        port="10.0.0.1", password="xxx", connection_type="console"
+    ).is_ssh() is False
+    assert DeviceInfo(
+        port="COM4", password="xxx", connection_type="ssh"
+    ).is_ssh() is True
 
 
 def test_agent_response_structure():
@@ -79,6 +91,22 @@ def test_agent_request_validate_action():
     )
     assert request.action == "validate"
     assert "before_config" in request.variables
+
+
+def test_agent_request_allow_dangerous_field():
+    """allow_dangerous / auto_rollback_on_failure 为一等字段。"""
+    req = AgentRequest(
+        action="deploy",
+        device=DeviceInfo(port="COM4", password="x"),
+        allow_dangerous=True,
+        auto_rollback_on_failure=True,
+        dry_run=True,
+    )
+    assert req.allow_dangerous is True
+    assert req.auto_rollback_on_failure is True
+    data = req.to_dict()
+    assert data["allow_dangerous"] is True
+    assert data["auto_rollback_on_failure"] is True
 
 
 # ==================== Parser / Verify 针对性测试 ====================

@@ -8,7 +8,7 @@
 from __future__ import annotations
 
 import json
-import os
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -16,6 +16,29 @@ from typing import Dict, List, Optional
 from src.console.logger import get_logger
 
 logger = get_logger("backup.exporter")
+
+_SAFE_DEVICE_NAME = re.compile(r"^[\w.-]+$")
+
+
+def sanitize_device_name(device_name: str) -> str:
+    """
+    校验并规范化设备名，防止路径穿越。
+
+    仅允许字母数字、下划线、点、连字符。
+    """
+    name = (device_name or "").strip()
+    if not name:
+        raise ValueError("invalid device_name: empty")
+    if name in {".", ".."} or ".." in name:
+        raise ValueError(f"invalid device_name: {device_name!r}")
+    if "/" in name or "\\" in name or "\x00" in name:
+        raise ValueError(f"invalid device_name: {device_name!r}")
+    if not _SAFE_DEVICE_NAME.fullmatch(name):
+        raise ValueError(
+            f"invalid device_name: {device_name!r} "
+            "(allowed: letters, digits, _, ., -)"
+        )
+    return name
 
 
 class ConfigExporter:
@@ -35,8 +58,17 @@ class ConfigExporter:
         导出备份到指定目录结构：
         backups/设备名/YYYYMMDD-HHMMSS/
         """
+        safe_name = sanitize_device_name(device_name)
         timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-        backup_dir = self.base_dir / device_name / timestamp
+        backup_dir = (self.base_dir / safe_name / timestamp).resolve()
+        base_resolved = self.base_dir.resolve()
+        try:
+            backup_dir.relative_to(base_resolved)
+        except ValueError as e:
+            raise ValueError(
+                f"backup path escapes base_dir: {backup_dir}"
+            ) from e
+
         backup_dir.mkdir(parents=True, exist_ok=True)
 
         logger.info(f"导出备份到: {backup_dir}")
@@ -45,35 +77,39 @@ class ConfigExporter:
         config_file = backup_dir / "current-configuration.txt"
         if "display current-configuration" in collected_data:
             config_file.write_text(
-                collected_data["display current-configuration"],
-                encoding="utf-8"
+                collected_data["display current-configuration"] or "",
+                encoding="utf-8",
             )
             logger.info(f"已保存配置文件: {config_file}")
 
         # 2. 写入各命令输出
         for cmd, output in collected_data.items():
-            safe_name = cmd.replace(" ", "_").replace("-", "_") + ".txt"
-            (backup_dir / safe_name).write_text(output, encoding="utf-8")
+            safe_cmd = cmd.replace(" ", "_").replace("-", "_") + ".txt"
+            (backup_dir / safe_cmd).write_text(output or "", encoding="utf-8")
 
         # 3. 写入元数据
         meta = metadata or {}
-        meta.update({
-            "timestamp": timestamp,
-            "device_name": device_name,
-            "backup_time": datetime.now().isoformat(),
-            "commands_collected": list(collected_data.keys()),
-        })
+        meta.update(
+            {
+                "timestamp": timestamp,
+                "device_name": safe_name,
+                "backup_time": datetime.now().isoformat(),
+                "commands_collected": list(collected_data.keys()),
+            }
+        )
         meta_file = backup_dir / "metadata.json"
         meta_file.write_text(
             json.dumps(meta, ensure_ascii=False, indent=2),
-            encoding="utf-8"
+            encoding="utf-8",
         )
 
         # 4. 写入设备信息摘要
         info_file = backup_dir / "device-info.txt"
         info_content = "\n".join(
-            [f"{k}: {v[:200]}..." if len(str(v)) > 200 else f"{k}: {v}"
-             for k, v in collected_data.items()]
+            [
+                f"{k}: {v[:200]}..." if len(str(v)) > 200 else f"{k}: {v}"
+                for k, v in collected_data.items()
+            ]
         )
         info_file.write_text(info_content, encoding="utf-8")
 
@@ -83,7 +119,8 @@ class ConfigExporter:
     def list_backups(self, device_name: Optional[str] = None) -> List[Path]:
         """列出所有备份目录。"""
         if device_name:
-            device_dir = self.base_dir / device_name
+            safe = sanitize_device_name(device_name)
+            device_dir = self.base_dir / safe
             if device_dir.exists():
                 return sorted(device_dir.iterdir(), reverse=True)
             return []

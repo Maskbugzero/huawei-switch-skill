@@ -102,6 +102,7 @@ def main():
         template="access_switch.j2",
         variables={
             "hostname": "SW-SSH-01",
+            "admin_password": "YourStrongPass@2026",
             "vlan_list": "10 20 30",
             "device_name": "SW-SSH-01"
         },
