@@ -8,6 +8,22 @@ from __future__ import annotations
 from typing import List
 
 
+def _strip_config_line(line: str) -> str:
+    """
+    清理配置行。
+
+    - 整行 # 注释丢弃
+    - 仅将「空格 + #」视为行尾注释（VRP 常见）
+    - 保留 description 中的 ## 标记，避免被截成裸 description
+    """
+    stripped = line.strip()
+    if not stripped or stripped.startswith("#"):
+        return ""
+    if " #" in stripped:
+        stripped = stripped.split(" #", 1)[0].rstrip()
+    return stripped
+
+
 class DeploymentPlanner:
     """部署步骤规划器。"""
 
@@ -22,7 +38,7 @@ class DeploymentPlanner:
         steps: List[str] = []
         prev: str | None = None
         for line in config_text.splitlines():
-            clean_line = line.split("#")[0].strip()
+            clean_line = _strip_config_line(line)
             if not clean_line:
                 continue
             if clean_line == prev:

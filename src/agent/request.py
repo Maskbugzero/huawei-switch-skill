@@ -113,6 +113,10 @@ class AgentRequest(BaseModel):
         default=True,
         description="If True (default), run VRP save after successful deploy",
     )
+    verify: bool = Field(
+        default=True,
+        description="If True (default), run shallow post-deploy verification (sysname/vlan/ssh)",
+    )
 
     def to_dict(self) -> Dict[str, Any]:
         """序列化为字典（便于 JSON 传输）"""

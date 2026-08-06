@@ -70,6 +70,12 @@ def _resolve_save(request: AgentRequest) -> bool:
     return request.save
 
 
+def _resolve_verify(request: AgentRequest) -> bool:
+    if "verify" in request.variables:
+        return as_bool(request.variables.get("verify"), default=request.verify)
+    return request.verify
+
+
 def _resolve_auto_rollback(request: AgentRequest) -> bool:
     if request.auto_rollback_on_failure:
         return True
@@ -207,6 +213,7 @@ class AgentAdapter:
                     allow_dangerous = _resolve_allow_dangerous(request)
                     auto_rollback = _resolve_auto_rollback(request)
                     save = _resolve_save(request)
+                    verify = _resolve_verify(request)
                     engine = DeploymentEngine()
                     report = engine.deploy(
                         connection=conn,
@@ -218,6 +225,7 @@ class AgentAdapter:
                         allow_dangerous=allow_dangerous,
                         auto_rollback_on_failure=auto_rollback,
                         save=save,
+                        verify=verify,
                     )
                     return _response_from_deploy_report(report)
 

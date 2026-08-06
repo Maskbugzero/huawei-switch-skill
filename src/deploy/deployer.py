@@ -17,6 +17,8 @@ from src.deploy.rollback import RollbackManager
 from src.deploy.planner import DeploymentPlanner
 from src.command.executor import CommandExecutor
 from src.command.exceptions import CommandExecutionError
+from src.verify import ConfigVerifier
+from src.verify.rules import build_expected_from_variables
 
 logger = get_logger("deploy")
 
@@ -228,6 +230,7 @@ class DeploymentEngine:
         dangerous_keywords: Optional[list[str]] = None,
         allow_dangerous: bool = False,
         save: bool = True,
+        verify: bool = True,
     ) -> Dict[str, Any]:
         """
         执行部署流程（支持幂等性和 Dry-Run）。
@@ -239,6 +242,7 @@ class DeploymentEngine:
         - 自动回滚默认关闭（running-config 逐行重放不安全）
         - 通过 CommandExecutor 下发，带错误检测
         - 成功后默认 save=True 落盘
+        - 成功后默认 verify=True 浅层校验（sysname/vlan/ssh）
 
         Args:
             connection: 已建立的 Connection 对象
@@ -251,6 +255,7 @@ class DeploymentEngine:
             dangerous_keywords: 自定义危险命令关键词列表
             allow_dangerous: 是否允许下发危险命令（默认 False）
             save: 部署成功后是否执行 save（默认 True）
+            verify: 部署成功后是否做浅层校验（默认 True）
 
         Returns:
             dict: 包含 status、steps、reason、changes_detected 等信息的报告
@@ -447,6 +452,34 @@ class DeploymentEngine:
                 return report
         else:
             report["saved"] = False
+
+        # 7. 浅层校验闭环（sysname / vlan / ssh）
+        if verify:
+            try:
+                after_config = self.collector.collect_current_config()
+                expected = build_expected_from_variables(variables)
+                vreport = ConfigVerifier().verify(
+                    before_config=current_config or "",
+                    after_config=after_config or "",
+                    expected=expected,
+                )
+                report["verification"] = vreport
+                report["steps"].append("verify")
+                if vreport.get("status") == "fail":
+                    report["status"] = "verify_failed"
+                    report["error"] = "post-deploy verification failed"
+                    report["reason"] = vreport.get("status")
+                    logger.error("部署后校验失败: %s", vreport)
+                    return report
+                logger.info("部署后校验通过: %s", vreport.get("status"))
+            except Exception as e:
+                logger.warning(f"部署后校验异常（不阻断 success）: {e}")
+                report["warnings"] = report.get("warnings", [])
+                report["warnings"].append(f"verify error: {e}")
+                report["verification"] = {
+                    "status": "error",
+                    "message": str(e),
+                }
 
         logger.info("部署完成")
         if "diff_summary" in report:

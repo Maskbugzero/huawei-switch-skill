@@ -1,0 +1,52 @@
+# Sample Huawei VRP running-config fragment for golden tests.
+# Mimics display current-configuration (secrets redacted).
+
+sysname SW-ACCESS-01
+#
+undo telnet server enable
+ssh server enable
+#
+aaa
+ local-user admin password irreversible-cipher ******
+ local-user admin privilege level 15
+ local-user admin service-type ssh
+#
+vlan batch 10 20 30 100
+#
+interface Vlanif100
+ description ## Management VLAN ##
+ ip address 192.168.100.10 255.255.255.0
+ undo shutdown
+#
+interface Eth-Trunk1
+ description ## Uplink to Aggregation ##
+ port link-type trunk
+ port trunk allow-pass vlan 10 20 30 100
+ undo shutdown
+#
+interface GigabitEthernet0/0/1
+ description ## Access Port - Floor 1 Room 01 PC-1 ##
+ port link-type access
+ port default vlan 20
+ port-security enable
+ port-security max-mac-num 2
+ port-security mac-address sticky
+ undo poe power-off
+ undo shutdown
+#
+interface GigabitEthernet0/0/2
+ description ## Access Port - Floor 1 Room 01 PC-2 ##
+ port link-type access
+ port default vlan 20
+ port-security enable
+ port-security max-mac-num 2
+ port-security mac-address sticky
+ undo poe power-off
+ undo shutdown
+#
+# ... remaining GE ports omitted in fixture; tests that need all 24 use rendered template ...
+#
+dhcp snooping enable
+dhcp snooping trusted interface Eth-Trunk1
+#
+return

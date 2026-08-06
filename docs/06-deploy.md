@@ -26,6 +26,7 @@
 | device_name | `"unknown"` | 备份目录名（仅 `[\w.-]+`，防路径穿越） |
 | dry_run | False | 仅模拟 |
 | save | **True** | 成功后执行 VRP `save` |
+| verify | **True** | 成功后浅层校验 sysname/vlan/ssh；失败 → `verify_failed` |
 | auto_rollback_on_failure | **False** | 失败自动回滚（实验性） |
 | allow_dangerous | **False** | 放行危险命令 |
 | dangerous_keywords | reboot/reset/delete/format/shutdown | 可自定义 |
@@ -36,11 +37,12 @@ SSH deploy（`AgentAdapter`）与 Console 对齐：**blocked / interface 感知�
 
 | status | AgentResponse.success | 含义 |
 |--------|----------------------|------|
-| success | True | 已下发（默认已 save） |
+| success | True | 已下发（默认已 save + verify pass） |
 | skipped | True | 目标意图已在对应 interface 上下文满足 |
 | dry_run | True | 仅计划 |
 | blocked | False | 危险命令未放行 |
 | failed | False | 执行失败（含 save 失败） |
+| verify_failed | False | 下发成功但部署后浅层校验未通过 |
 
 ### 幂等语义（interface 感知）
 

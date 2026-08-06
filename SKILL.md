@@ -1,7 +1,7 @@
 ---
 name: huawei-switch-skill
 description: "Use when automating Huawei VRP switches: Console for single-device config/deploy, or SSH batch management (inventory backup/command) for managed fleets; also first-login password change."
-version: 1.0.2
+version: 0.3.0
 author: User
 license: MIT
 tags:
@@ -263,9 +263,14 @@ response = adapter.execute(request)
 
 自动回滚：默认 **关闭**。开启 `auto_rollback_on_failure=True` 时为实验性「备份逐行重放」，不保证完整恢复。
 
-部署成功后默认 **`save=True`** 落盘；`dry_run` / `skipped` 不 save。
+部署成功后默认 **`save=True`** 落盘，并默认 **`verify=True`** 做浅层校验（sysname / vlan / ssh）；校验失败返回 `verify_failed`。
 
-Planner：**不**全局去重，保证多接口模板子命令完整下发。
+Planner：**不**全局去重，保证多接口模板子命令完整下发；`description ##...##` 不会被当成注释截断。
+
+### 改密与 Dry-Run（运维注意）
+
+- 幂等比较**忽略** password/cipher 行：仅改 `admin_password` 不会触发下发。轮换口令请用 `SSHFirstConnect` 或专用改密流程，不要依赖 deploy skip。
+- 生产建议：`backup=True`，先 `dry_run=True`，确认 `diff_summary` 后再真实部署。
 
 
 ### 使用示例（推荐通过 AgentAdapter）

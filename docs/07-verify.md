@@ -3,68 +3,35 @@
 > **注意**：请使用项目 `.venv` 虚拟环境运行本模块（详见 `SKILL.md`）。
 
 ## 目标
-验证配置正确性。
+验证配置正确性；并与 **deploy 成功路径闭环**（浅层）。
 
 ## 已实现
 - ConfigVerifier（主校验逻辑）
-- VerificationRules（VLAN、Trunk、SSH 等规则）
+- VerificationRules：`sysname` / `vlan_consistency` / `trunk_consistency` / `ssh_status`
+- `build_expected_from_variables()`：从 deploy variables 生成 expected
+- VLAN 匹配支持 `vlan N` 与 `vlan batch ...`（避免 `vlan 1` 误匹配 `vlan 10`）
 - ReportGenerator（Markdown / HTML 报告）
+- **DeploymentEngine**：`verify=True`（默认）时在 save 后重采 running-config 并校验；失败 → `status=verify_failed`
 
 ## 文件
 - verifier.py / rules.py / report.py
 
-## 核心 API
-
-### ConfigVerifier
+## 与 deploy 闭环
 
 ```python
-class ConfigVerifier:
-    def __init__(self, rules: Optional[List[Rule]] = None) -> None:
-        ...
-
-    def verify(
-        self,
-        actual_config: Dict[str, Any],
-        expected_config: Dict[str, Any]
-    ) -> VerificationReport:
-        ...
-
-    def generate_report(
-        self,
-        report: VerificationReport,
-        format: str = "markdown"
-    ) -> str:
-        ...
+report = engine.deploy(..., verify=True)  # 默认
+# report["verification"] -> {status, checks, details}
+# status == "verify_failed" 表示下发成功但校验未通过
 ```
 
-### 主要参数
+也可独立调用：
 
-| 参数            | 类型                | 默认值     | 说明                     |
-|-----------------|---------------------|------------|--------------------------|
-| actual_config   | Dict[str, Any]      | -          | 实际解析后的配置         |
-| expected_config | Dict[str, Any]      | -          | 期望配置（或模板变量）   |
-| format          | str                 | "markdown" | 报告格式（markdown/html）|
-
-## 典型用法示例
-
-### 配置一致性校验
 ```python
-from src.parser import ConfigParser
 from src.verify import ConfigVerifier
+from src.verify.rules import build_expected_from_variables
 
-parser = ConfigParser()
-verifier = ConfigVerifier()
-
-actual = parser.parse(open("current-config.txt").read())
-expected = {"sysname": "SW-01", "vlans": [10, 20, 30]}
-
-report = verifier.verify(actual, expected)
-print(verifier.generate_report(report, format="markdown"))
+expected = build_expected_from_variables({"hostname": "SW-01", "vlan_list": "10 20"})
+report = ConfigVerifier().verify(before, after, expected)
 ```
 
-## 验收
-自动输出校验报告（支持 Markdown/HTML）。
-
-**相关文档**：
-- `08-agent.md`：通过 `AgentAdapter` 统一调用校验（validate action）
-- `06-deploy.md`：部署后自动校验集成
+**相关**：`06-deploy.md`、`08-agent.md`、`SKILL.md`

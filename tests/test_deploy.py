@@ -29,8 +29,7 @@ def test_deploy_success():
             variables=_vars(),
             device_name="SW-01",
             backup=True,
-            save=False,
-        )
+            save=False, verify=False)
 
         assert report["status"] == "success"
         assert "backup" in report["steps"]
@@ -65,8 +64,7 @@ def test_deploy_failure_with_auto_rollback():
             device_name="SW-01",
             backup=True,
             auto_rollback_on_failure=True,
-            save=False,
-        )
+            save=False, verify=False)
 
         assert report["status"] == "failed"
         assert "rollback" in report
@@ -99,8 +97,7 @@ def test_deploy_auto_rollback_default_is_off():
             variables=_vars(),
             device_name="SW-01",
             backup=True,
-            save=False,
-        )
+            save=False, verify=False)
 
     assert report["status"] == "failed"
     assert report.get("rollback", {}).get("attempted") is False
@@ -131,8 +128,7 @@ def test_deploy_failure_without_auto_rollback():
             device_name="SW-01",
             backup=True,
             auto_rollback_on_failure=False,
-            save=False,
-        )
+            save=False, verify=False)
 
         assert report["status"] == "failed"
         assert report.get("rollback", {}).get("attempted") is False
@@ -160,8 +156,7 @@ def test_deploy_no_backup_no_rollback():
             variables=_vars(),
             backup=False,
             auto_rollback_on_failure=True,
-            save=False,
-        )
+            save=False, verify=False)
 
     assert report["status"] == "failed"
     assert "backup_path" not in report
@@ -198,8 +193,7 @@ def test_deploy_idempotent_skip_when_no_change():
                 template="access_switch.j2",
                 variables=_vars(),
                 device_name="SW-01",
-                backup=True,
-            )
+                backup=True, verify=False)
 
             assert report["status"] == "skipped"
             reason = report.get("reason", "")
@@ -232,8 +226,7 @@ def test_deploy_idempotent_detects_missing_intent_lines():
                 template="access_switch.j2",
                 variables=_vars(),
                 backup=False,
-                save=False,
-            )
+                save=False, verify=False)
 
     assert report["status"] == "success"
     assert report.get("changes_detected") is True
@@ -359,8 +352,7 @@ def test_deploy_current_config_collection_failure():
                 variables=_vars(),
                 device_name="SW-01",
                 backup=False,
-                save=False,
-            )
+                save=False, verify=False)
 
             # 即使采集失败，也应该继续执行（不跳过）
             assert report["status"] in ["success", "failed", "dry_run"]
@@ -392,8 +384,7 @@ def test_deploy_failure_with_suggested_undo():
             device_name="SW-01",
             backup=True,
             auto_rollback_on_failure=True,
-            save=False,
-        )
+            save=False, verify=False)
 
         assert report["status"] == "failed"
         assert "rollback" in report
@@ -419,8 +410,7 @@ def test_deploy_dangerous_command_blocked_by_default():
                 template="access_switch.j2",
                 variables=_vars(),
                 device_name="SW-01",
-                backup=False,
-            )
+                backup=False, verify=False)
 
     assert report["status"] == "blocked"
     assert report.get("dangerous_commands")
@@ -445,8 +435,7 @@ def test_deploy_dangerous_command_allowed_when_explicit():
             backup=False,
             allow_dangerous=True,
             dangerous_keywords=["interface"],
-            save=False,
-        )
+            save=False, verify=False)
 
     assert report["status"] == "success"
     assert "warnings" in report
@@ -480,8 +469,7 @@ def test_deploy_uses_command_executor_for_error_detection():
             connection=mock_conn,
             template="access_switch.j2",
             variables=_vars(),
-            backup=False,
-        )
+            backup=False, verify=False)
 
     assert report["status"] == "failed"
     mock_exec_cls.assert_called_once()
@@ -599,8 +587,7 @@ def test_deploy_saves_by_default_after_success():
             connection=mock_conn,
             template="access_switch.j2",
             variables=_vars(),
-            backup=False,
-        )
+            backup=False, verify=False)
 
     assert report["status"] == "success"
     assert report.get("saved") is True
@@ -631,8 +618,7 @@ def test_deploy_save_can_be_disabled():
             template="access_switch.j2",
             variables=_vars(),
             backup=False,
-            save=False,
-        )
+            save=False, verify=False)
 
     assert report["status"] == "success"
     assert report.get("saved") is False
@@ -661,8 +647,7 @@ def test_deploy_skips_empty_backup_when_collect_fails():
             variables=_vars(),
             device_name="SW-01",
             backup=True,
-            save=False,
-        )
+            save=False, verify=False)
 
     mock_export.assert_not_called()
     assert "backup_path" not in report or report.get("backup_skipped") is True
