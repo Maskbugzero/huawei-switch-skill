@@ -335,6 +335,7 @@ elif response.data.get("status") == "dry_run":
 ## 相关文档
 
 - `docs/00-overview.md` — 项目整体概览与场景分工
+- `docs/runbook-access-onboarding.md` — **接入交换机开局操作手册（推荐照做）**
 - `docs/09-ssh.md` — SSH 首次改密
 - `docs/10-batch.md` — SSH 批量管理（清单 / backup / command）
 - `README.md` — 快速开始

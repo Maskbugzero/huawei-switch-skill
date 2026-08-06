@@ -21,6 +21,7 @@
 | 场景 | 推荐入口 |
 |------|----------|
 | 串口配置 / deploy | `Connection` + `DeploymentEngine` 或 `AgentAdapter` + `connection_type="console"` |
+| 接入开局操作手册 | **`docs/runbook-access-onboarding.md`** |
 | 多机备份 / 批量命令 | `BatchSSHManager`（`src/ssh/batch.py`）+ `configs/devices.yaml` |
 | 首次改密 | `SSHFirstConnect` |
 | 单台 SSH 临时 backup/command | `AgentAdapter` + `connection_type="ssh"` |
