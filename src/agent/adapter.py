@@ -41,6 +41,7 @@ from src.agent.error_codes import (
     VAL001,
 )
 from src.agent.request import AgentRequest, AgentResponse
+from src.agent.utils import as_bool
 from src.console.logger import get_logger
 from src.command import CommandExecutor, ErrorDetector
 from src.command.exceptions import CommandExecutionError
@@ -55,6 +56,42 @@ from src.template import TemplateRenderer
 logger = get_logger("agent")
 
 _SUCCESS_STATUSES = frozenset({"success", "skipped", "dry_run"})
+
+
+def _resolve_allow_dangerous(request: AgentRequest) -> bool:
+    if request.allow_dangerous:
+        return True
+    return as_bool(request.variables.get("allow_dangerous", False), default=False)
+
+
+def _resolve_save(request: AgentRequest) -> bool:
+    if "save" in request.variables:
+        return as_bool(request.variables.get("save"), default=request.save)
+    return request.save
+
+
+def _resolve_auto_rollback(request: AgentRequest) -> bool:
+    if request.auto_rollback_on_failure:
+        return True
+    return as_bool(
+        request.variables.get("auto_rollback_on_failure", False), default=False
+    )
+
+
+def _blocked_dangerous_response(cmd: str) -> AgentResponse:
+    return AgentResponse(
+        success=False,
+        code=DEP001.code,
+        message=(
+            "dangerous command blocked; pass allow_dangerous=True to override"
+        ),
+        error="dangerous command blocked",
+        data={
+            "status": "blocked",
+            "command": cmd,
+            "reason": "dangerous command blocked",
+        },
+    )
 
 
 def _map_exception_code(exc: BaseException) -> str:
@@ -167,17 +204,9 @@ class AgentAdapter:
                 if request.action == "deploy":
                     from src.deploy import DeploymentEngine
 
-                    # variables 中的同名键可覆盖（向后兼容），顶层字段优先被显式使用
-                    allow_dangerous = request.allow_dangerous or bool(
-                        request.variables.get("allow_dangerous", False)
-                    )
-                    auto_rollback = request.auto_rollback_on_failure or bool(
-                        request.variables.get("auto_rollback_on_failure", False)
-                    )
-                    # save 默认 True；variables 可覆盖
-                    save = request.save
-                    if "save" in request.variables:
-                        save = bool(request.variables.get("save"))
+                    allow_dangerous = _resolve_allow_dangerous(request)
+                    auto_rollback = _resolve_auto_rollback(request)
+                    save = _resolve_save(request)
                     engine = DeploymentEngine()
                     report = engine.deploy(
                         connection=conn,
@@ -200,6 +229,11 @@ class AgentAdapter:
                             code=APT001.code,
                             message="command action 缺少 command 参数",
                         )
+                    if (
+                        _line_is_dangerous(str(cmd), DEFAULT_DANGEROUS_KEYWORDS)
+                        and not _resolve_allow_dangerous(request)
+                    ):
+                        return _blocked_dangerous_response(str(cmd))
                     executor = CommandExecutor(conn)
                     output = executor.send_command(cmd)
                     return AgentResponse(success=True, data={"output": output})
@@ -314,6 +348,21 @@ class AgentAdapter:
         username = request.device.username
         password = request.device.password.get_secret_value()
 
+        # command：连接前校验参数与危险命令（避免无谓登录）
+        if request.action == "command":
+            cmd = str(request.variables.get("command", "") or "").strip()
+            if not cmd:
+                return AgentResponse(
+                    success=False,
+                    code=APT001.code,
+                    message="SSH command action 缺少 command 参数",
+                )
+            if (
+                _line_is_dangerous(cmd, DEFAULT_DANGEROUS_KEYWORDS)
+                and not _resolve_allow_dangerous(request)
+            ):
+                return _blocked_dangerous_response(cmd)
+
         logger.info(f"SSH 模式执行 action={request.action}，目标: {host}:{port}")
 
         ssh_device = {
@@ -332,13 +381,7 @@ class AgentAdapter:
             conn.send_command("screen-length 0 temporary")
 
             if request.action == "command":
-                cmd = request.variables.get("command", "")
-                if not cmd:
-                    return AgentResponse(
-                        success=False,
-                        code=APT001.code,
-                        message="SSH command action 缺少 command 参数",
-                    )
+                cmd = str(request.variables.get("command", "") or "").strip()
                 output = conn.send_command(cmd, read_timeout=30)
                 detector = ErrorDetector()
                 err = detector.detect(output or "")
@@ -426,9 +469,7 @@ class AgentAdapter:
         renderer = TemplateRenderer()
         target_config = renderer.render(template_name, request.variables)
 
-        allow_dangerous = request.allow_dangerous or bool(
-            request.variables.get("allow_dangerous", False)
-        )
+        allow_dangerous = _resolve_allow_dangerous(request)
 
         # 危险命令默认阻断
         dangerous_commands = [
@@ -520,9 +561,7 @@ class AgentAdapter:
             )
 
         # 成功后默认 save（与 Console 对齐）
-        do_save = request.save
-        if "save" in request.variables:
-            do_save = bool(request.variables.get("save"))
+        do_save = _resolve_save(request)
         if do_save and not request.dry_run:
             try:
                 # netmiko 下 save 确认因平台而异；尽力发送

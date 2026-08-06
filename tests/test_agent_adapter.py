@@ -298,11 +298,11 @@ def test_agent_adapter_validate_fail_sets_success_false():
 
 
 def test_ssh_empty_command_still_disconnects():
-    """SSH command 缺参数时也必须 disconnect，避免连接泄漏。"""
+    """SSH command 缺参数时不建立连接（连接前校验）。"""
     adapter = AgentAdapter()
     mock_ssh = MagicMock()
 
-    with patch("src.agent.adapter.ConnectHandler", return_value=mock_ssh):
+    with patch("src.agent.adapter.ConnectHandler", return_value=mock_ssh) as ch:
         response = adapter.execute(
             AgentRequest(
                 action="command",
@@ -316,7 +316,7 @@ def test_ssh_empty_command_still_disconnects():
         )
 
     assert response.success is False
-    mock_ssh.disconnect.assert_called()
+    ch.assert_not_called()
 
 
 def test_ssh_deploy_blocks_dangerous_commands():
@@ -384,3 +384,118 @@ def test_ssh_deploy_detects_error_in_output():
     assert response.success is False
     assert response.data.get("status") in {"failed", "partial"}
     mock_ssh.disconnect.assert_called()
+
+
+def test_as_bool_parses_string_false():
+    from src.agent.utils import as_bool
+
+    assert as_bool("false") is False
+    assert as_bool("False") is False
+    assert as_bool("0") is False
+    assert as_bool("no") is False
+    assert as_bool("off") is False
+    assert as_bool("true") is True
+    assert as_bool("1") is True
+    assert as_bool("yes") is True
+    assert as_bool(True) is True
+    assert as_bool(False) is False
+    assert as_bool(None, default=True) is True
+
+
+def test_deploy_variables_string_false_does_not_enable_dangerous():
+    """variables.allow_dangerous='false' 不得被 bool() 当成 True。"""
+    adapter = AgentAdapter()
+    mock_conn = MagicMock()
+    mock_conn.__enter__.return_value = mock_conn
+    mock_conn.__exit__.return_value = False
+
+    with patch("src.agent.adapter.Connection", return_value=mock_conn), \
+         patch("src.deploy.DeploymentEngine") as mock_engine_cls:
+        mock_engine = MagicMock()
+        mock_engine.deploy.return_value = {"status": "success", "steps": [], "saved": False}
+        mock_engine_cls.return_value = mock_engine
+
+        adapter.execute(
+            AgentRequest(
+                action="deploy",
+                device=DeviceInfo(port="COM4", password="xxx"),
+                template="access_switch.j2",
+                variables={
+                    "hostname": "SW-01",
+                    "admin_password": "Secret@2026",
+                    "allow_dangerous": "false",
+                    "save": "false",
+                },
+                backup=False,
+                allow_dangerous=False,
+            )
+        )
+
+        kwargs = mock_engine.deploy.call_args.kwargs
+        assert kwargs.get("allow_dangerous") is False
+        assert kwargs.get("save") is False
+
+
+def test_agent_command_blocks_dangerous_by_default():
+    """command action 默认阻断 reboot 等危险命令。"""
+    adapter = AgentAdapter()
+    mock_conn = MagicMock()
+    mock_conn.__enter__.return_value = mock_conn
+    mock_conn.__exit__.return_value = False
+
+    with patch("src.agent.adapter.Connection", return_value=mock_conn):
+        response = adapter.execute(
+            AgentRequest(
+                action="command",
+                device=DeviceInfo(port="COM4", password="xxx"),
+                variables={"command": "reboot"},
+            )
+        )
+
+    assert response.success is False
+    assert "dangerous" in (response.message or "").lower() or \
+           "dangerous" in (response.error or "").lower()
+    mock_conn.send_command.assert_not_called()
+
+
+def test_agent_command_allow_dangerous_explicit():
+    adapter = AgentAdapter()
+    mock_conn = MagicMock()
+    mock_conn.__enter__.return_value = mock_conn
+    mock_conn.__exit__.return_value = False
+    mock_conn.send_command.return_value = "OK"
+
+    with patch("src.agent.adapter.Connection", return_value=mock_conn), \
+         patch("src.agent.adapter.CommandExecutor") as mock_exec_cls:
+        mock_exec = MagicMock()
+        mock_exec.send_command.return_value = "rebooting"
+        mock_exec_cls.return_value = mock_exec
+
+        response = adapter.execute(
+            AgentRequest(
+                action="command",
+                device=DeviceInfo(port="COM4", password="xxx"),
+                variables={"command": "reboot"},
+                allow_dangerous=True,
+            )
+        )
+
+    assert response.success is True
+    mock_exec.send_command.assert_called()
+
+
+def test_ssh_command_blocks_dangerous_by_default():
+    adapter = AgentAdapter()
+    mock_ssh = MagicMock()
+
+    with patch("src.agent.adapter.ConnectHandler", return_value=mock_ssh) as ch:
+        response = adapter.execute(
+            AgentRequest(
+                action="command",
+                device=DeviceInfo(port="10.0.0.1", password="xxx", connection_type="ssh"),
+                variables={"command": "reset saved-configuration"},
+            )
+        )
+
+    assert response.success is False
+    ch.assert_not_called()

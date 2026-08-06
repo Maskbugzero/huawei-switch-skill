@@ -257,9 +257,9 @@ response = adapter.execute(request)
 | 检测到危险命令且未放行   | `blocked`       | False                   | 默认安全策略 |
 | 部署失败                 | `failed`        | False                   | 默认不自动回滚 |
 
-幂等语义：**interface 感知意图子集**（目标接口块 ⊆ 同名接口当前配置；全局行在全局区匹配），不是整机配置全量相等，也不是无上下文扁平行集合。
+幂等语义：**interface 感知意图子集**（目标接口块 ⊆ 同名接口当前配置；全局行在全局区匹配；**忽略 password/cipher 等密钥行**），不是整机配置全量相等，也不是无上下文扁平行集合。
 
-危险命令：默认关键词 `reboot/reset/delete/format/shutdown`（`undo shutdown` 不视为危险）。需显式 `allow_dangerous=True`（或 variables 中同名）才放行。
+危险命令：默认关键词 `reboot/reset/delete/format/shutdown`（`undo shutdown` 不视为危险）。需显式 `allow_dangerous=True`（或 variables 中同名，支持字符串 `"true"`/`"false"`）才放行。**deploy 与 command（Console/SSH）均默认阻断**。
 
 自动回滚：默认 **关闭**。开启 `auto_rollback_on_failure=True` 时为实验性「备份逐行重放」，不保证完整恢复。
 

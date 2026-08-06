@@ -533,6 +533,50 @@ def test_configs_differ_global_lines_still_checked():
     assert is_diff is True
 
 
+def test_configs_differ_ignores_password_and_cipher_lines():
+    """幂等比较忽略密钥行：设备密文与模板明文不一致不应阻止 skip。"""
+    engine = DeploymentEngine()
+    target = (
+        "sysname SW-01\n"
+        "aaa\n"
+        " local-user admin password irreversible-cipher Secret@2026\n"
+        " local-user admin privilege level 15\n"
+        " quit\n"
+        "interface Vlanif10\n"
+        " ip address 192.168.10.1 24\n"
+    )
+    current = (
+        "sysname SW-01\n"
+        "aaa\n"
+        " local-user admin password irreversible-cipher ******\n"
+        " local-user admin privilege level 15\n"
+        " quit\n"
+        "interface Vlanif10\n"
+        " ip address 192.168.10.1 24\n"
+    )
+    is_diff, summary = engine._configs_differ(target, current)
+    assert is_diff is False
+    assert "意图" in summary or "满足" in summary
+
+
+def test_configs_differ_still_detects_missing_after_ignoring_secrets():
+    """忽略密钥后，其它缺失行仍应检出。"""
+    engine = DeploymentEngine()
+    target = (
+        "sysname SW-01\n"
+        " local-user admin password irreversible-cipher Secret@2026\n"
+        "vlan batch 10 20 30\n"
+    )
+    current = (
+        "sysname SW-01\n"
+        " local-user admin password irreversible-cipher ******\n"
+        "vlan batch 10 20\n"
+    )
+    is_diff, summary = engine._configs_differ(target, current)
+    assert is_diff is True
+    assert "vlan batch" in summary or "缺少" in summary
+
+
 def test_deploy_saves_by_default_after_success():
     """部署成功后默认执行 save。"""
     engine = DeploymentEngine()

@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased] - 2026-08-06
 
 ### Fixed
+- Idempotency ignores secret lines (`password` / `irreversible-cipher` / `cipher …`) so full templates can `skipped` against device ciphertext
+- `variables` string booleans: `"false"` / `"0"` / `"no"` no longer treated as True (`as_bool`)
+- `command` action (Console + SSH) blocks dangerous commands by default; SSH validates before connect
+
+### Fixed (prior)
 - **P0** `DeploymentPlanner.plan` no longer globally dedupes lines — multi-interface templates keep repeated subcommands (`port link-type access`, `undo shutdown`, …); only consecutive identical lines collapse
 - **P1** Deploy idempotency is **interface-aware** (per-interface body subset + global lines); stops false `skipped` when the same line exists under another interface
 - **P1** Successful deploy defaults to VRP `save` (`save=True`); report includes `saved`
@@ -21,7 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `InventoryDevice.password` is `SecretStr`; inventory `name` sanitized
 
 ### Tests
-- **95 passed**
+- **101+ passed**
 
 ## [0.2.0] - 2026-08-02
 

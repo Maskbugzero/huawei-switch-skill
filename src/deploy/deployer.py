@@ -56,6 +56,40 @@ def _normalize_if_name(name: str) -> str:
     return re.sub(r"\s+", "", name.strip().lower())
 
 
+def _is_secret_config_line(line: str) -> bool:
+    """
+    判断是否为密钥/口令类配置行。
+
+    幂等比较时应忽略：设备 display 多为密文或 ******，与模板明文永不相等。
+    """
+    low = line.strip().lower()
+    if not low:
+        return False
+    # 常见 VRP 密钥形态
+    markers = (
+        "password",
+        "irreversible-cipher",
+        "pre-shared-key",
+        "authentication-key",
+        "private-key",
+        "server-key",
+        "shared-key",
+    )
+    if any(m in low for m in markers):
+        return True
+    # snmp-agent community ... cipher <secret>
+    if re.search(r"\bcipher\s+\S+", low):
+        return True
+    # 独立 secret <value>
+    if re.search(r"\bsecret\s+\S+", low):
+        return True
+    return False
+
+
+def _filter_secret_lines(lines: List[str]) -> List[str]:
+    return [ln for ln in lines if not _is_secret_config_line(ln)]
+
+
 def _parse_config_sections(
     text: str,
 ) -> Tuple[List[str], Dict[str, List[str]]]:
@@ -127,6 +161,7 @@ def configs_intent_differs(rendered: str, current: str) -> Tuple[bool, str]:
     - 目标中的每个 interface 块：当前必须存在同名接口，且块内每行 ⊆ 该接口块
     - 目标全局行：须出现在当前全局行中（不把其它接口下的行算作全局满足）
     - 忽略纯 system-view / return 噪声
+    - **忽略密钥/口令行**（password / cipher 等），避免密文导致永不 skip
 
     Returns:
         (is_different, diff_summary)
@@ -140,21 +175,26 @@ def configs_intent_differs(rendered: str, current: str) -> Tuple[bool, str]:
 
     missing: List[str] = []
 
-    c_global_set = {g for g in c_global if not _ignore_global(g)}
-    for line in t_global:
+    c_global_set = {
+        g
+        for g in _filter_secret_lines(c_global)
+        if not _ignore_global(g)
+    }
+    for line in _filter_secret_lines(t_global):
         if _ignore_global(line):
             continue
         if line not in c_global_set:
             missing.append(line)
 
     for if_name, body in t_ifs.items():
+        t_body = _filter_secret_lines(body)
         if if_name not in c_ifs:
             missing.append(f"interface {if_name}")
-            for line in body:
+            for line in t_body:
                 missing.append(f"  [{if_name}] {line}")
             continue
-        c_body = set(c_ifs[if_name])
-        for line in body:
+        c_body = set(_filter_secret_lines(c_ifs[if_name]))
+        for line in t_body:
             if line not in c_body:
                 missing.append(f"[{if_name}] {line}")
 

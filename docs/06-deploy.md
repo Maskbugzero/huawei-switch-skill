@@ -46,7 +46,8 @@ SSH deploy（`AgentAdapter`）与 Console 对齐：**blocked / interface 感知�
 
 - 按 `interface` 块比较：目标接口下的每一行须出现在**同名接口**当前配置中
 - 全局行（如 `sysname`、`vlan batch`）在全局区匹配
-- **不再**使用无上下文的扁平行集合（避免「口2 的 undo shutdown 让口1 假 skip」）
+- **忽略密钥行**（`password` / `irreversible-cipher` / `cipher <secret>` 等），避免设备密文导致永不 skip
+- **不再**使用无上下文的扁平行集合
 
 ### Planner 语义
 
