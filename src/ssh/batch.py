@@ -99,6 +99,7 @@ class BatchSSHManager:
         return cls(load_inventory(path), backup_base_dir=backup_base_dir)
 
     def _connect(self, device: InventoryDevice):
+        # netmiko 4.x：ConnectHandler 不接受 read_timeout；读超时用 send_command(read_timeout=...)
         params = {
             "device_type": device.device_type,
             "host": device.host,
@@ -106,11 +107,10 @@ class BatchSSHManager:
             "password": _device_password(device),
             "port": device.port,
             "conn_timeout": 30,
-            "read_timeout": 30,
         }
         conn = ConnectHandler(**params)
         try:
-            conn.send_command("screen-length 0 temporary")
+            conn.send_command("screen-length 0 temporary", read_timeout=30)
         except Exception as e:
             logger.warning(f"{device.name}: screen-length failed: {e}")
         return conn

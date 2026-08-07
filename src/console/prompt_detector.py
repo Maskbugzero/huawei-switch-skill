@@ -17,14 +17,15 @@ class PromptDetector:
     """提示符自动识别器。"""
 
     # 常见华为提示符模式（使用行尾锚点避免误判）
+    # 注意：接口视图如 [GigabitEthernet0/0/24] 含 /，\w 不够
     PROMPT_PATTERNS = [
-        r"<[\w\-]+>\s*$",           # <hostname>（用户视图）
-        r"\[[\w\-]+\]\s*$",         # [hostname]（系统视图）
-        r"[\w\-]+>\s*$",            # hostname>（兼容）
-        r"[\w\-]+\]\s*$",           # hostname]（兼容）
-        r"[Pp]assword[:：]\s*$",    # 密码提示（支持中英文冒号）
+        r"<[\w\-./:]+>\s*$",           # <hostname>（用户视图）
+        r"\[[\w\-./:]+(?:-[^\]]+)?\]\s*$",  # [hostname] / [GigabitEthernet0/0/1] / [hostname-aaa]
+        r"[\w\-./:]+>\s*$",            # hostname>（兼容，无尖括号）
+        r"[\w\-./:]+\]\s*$",           # hostname]（兼容；尽量靠后匹配完整后缀）
+        r"[Pp]assword[:：]\s*$",       # 密码提示（支持中英文冒号）
         r"Confirm [Pp]assword[:：]\s*$",  # 确认密码
-        r"Continue\?\s*\[Y/N\]",    # Continue? [Y/N]
+        r"Continue\?\s*\[Y/N\]",       # Continue? [Y/N]
     ]
 
     def __init__(self) -> None:
@@ -41,8 +42,13 @@ class PromptDetector:
         return None
 
     def is_prompt(self, text: str) -> bool:
-        """检查文本是否包含提示符。"""
-        for pattern in self.compiled_patterns:
+        """检查文本是否以 CLI 提示符结束（读命令输出时使用）。
+
+        注意：Password: / Continue? 等登录交互提示不应作为命令结束条件，
+        否则登录后的命令读取可能被误截断。
+        """
+        cli_patterns = self.compiled_patterns[:4]
+        for pattern in cli_patterns:
             if pattern.search(text):
                 return True
         return False

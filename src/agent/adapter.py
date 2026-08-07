@@ -373,6 +373,7 @@ class AgentAdapter:
 
         logger.info(f"SSH 模式执行 action={request.action}，目标: {host}:{port}")
 
+        # netmiko 4.x：ConnectHandler 无 read_timeout 参数；读超时在 send_command 上传
         ssh_device = {
             "device_type": "huawei_vrp",
             "host": host,
@@ -380,7 +381,6 @@ class AgentAdapter:
             "password": password,
             "port": port,
             "conn_timeout": 30,
-            "read_timeout": 30,
         }
 
         conn = None

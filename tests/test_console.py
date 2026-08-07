@@ -26,9 +26,14 @@ class TestPromptDetector:
 
     def test_is_prompt(self):
         detector = PromptDetector()
+        # is_prompt 仅用于命令输出结束判断：只认 CLI 提示符
         assert detector.is_prompt("<SW-01>") is True
-        assert detector.is_prompt("Password:") is True
+        assert detector.is_prompt("[SW-01]") is True
+        assert detector.is_prompt("[SW-01-GigabitEthernet0/0/24]") is True
         assert detector.is_prompt("random text") is False
+        # Password: 仍可由 detect() 识别，但不应作为命令结束条件
+        assert detector.is_prompt("Password:") is False
+        assert detector.detect("Password:") == "Password:"
 
 
 class TestPagerHandler:

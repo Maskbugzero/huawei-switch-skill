@@ -1,0 +1,11 @@
+{# 真机联调安全模板：保持主机名，仅打标记 VLAN + 末口描述，不改口令/管理 IP #}
+system-view
+sysname {{ hostname }}
+
+vlan batch {{ vlan_list }}
+
+interface {{ test_port }}
+ description {{ test_description }}
+undo shutdown
+
+return

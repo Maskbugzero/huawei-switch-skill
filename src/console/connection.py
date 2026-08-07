@@ -70,6 +70,7 @@ class Connection:
         output = self._read_until_prompt_or_password()
         logger.debug(f"连接后输出: {output}")
 
+        post_auth_output = output
         if "Password:" in output or "password:" in output.lower():
             if self.password:
                 self.transport.send_line(self.password)
@@ -78,23 +79,53 @@ class Connection:
                 if "Error" in confirm_output or "invalid" in confirm_output.lower():
                     raise AuthenticationError("密码错误")
                 logger.info("密码认证成功")
+                post_auth_output = confirm_output
             else:
                 raise AuthenticationError("需要密码但未提供")
 
-        # 检测提示符
-        self.current_prompt = self.prompt_detector.detect(output)
-        if not self.current_prompt:
-            # 尝试再次读取
+        # 检测提示符（必须用登录后的输出，避免把 Password: 当成设备提示符）
+        self.current_prompt = self.prompt_detector.detect(post_auth_output)
+        if not self.current_prompt or "password" in self.current_prompt.lower():
+            # 尝试再次读取真实 CLI 提示符
             more = self._read_until_prompt()
             self.current_prompt = self.prompt_detector.detect(more)
 
-        if not self.current_prompt:
+        if not self.current_prompt or "password" in (self.current_prompt or "").lower():
             raise PromptNotFound("无法识别设备提示符")
 
         logger.info(f"连接成功，提示符: {self.current_prompt}")
 
         # 关闭分页
         self._disable_pager()
+
+        # 串口会话可能残留在 system-view / 接口视图；统一回到用户视图
+        self._ensure_user_view()
+
+    def _ensure_user_view(self) -> None:
+        """尽量退出到用户视图 <hostname>，避免后续 system-view 失败。"""
+        try:
+            # 多次 return，覆盖接口视图/AAA 等深层视图
+            for _ in range(4):
+                prompt = self.current_prompt or ""
+                if prompt.startswith("<") and prompt.endswith(">"):
+                    return
+                self.transport.send_line("return")
+                time.sleep(0.4)
+                text = self._read_until_prompt(timeout=8)
+                detected = self.prompt_detector.detect(text)
+                if detected and "password" not in detected.lower():
+                    self.current_prompt = detected
+            # 仍不在用户视图则再试 quit
+            if not (self.current_prompt or "").startswith("<"):
+                self.transport.send_line("quit")
+                time.sleep(0.3)
+                text = self._read_until_prompt(timeout=5)
+                detected = self.prompt_detector.detect(text)
+                if detected and "password" not in detected.lower():
+                    self.current_prompt = detected
+            logger.info(f"视图同步后提示符: {self.current_prompt}")
+        except Exception as e:
+            logger.warning(f"同步用户视图失败（可继续）: {e}")
 
     def _read_until_prompt_or_password(self, timeout: Optional[float] = None) -> str:
         """读取直到提示符或密码提示。"""

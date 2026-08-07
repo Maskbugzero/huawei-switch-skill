@@ -46,9 +46,15 @@ def _normalize_config(text: str) -> list[str]:
     for line in text.splitlines():
         stripped = line.strip()
         if stripped and not stripped.startswith("#"):
-            # 去掉行尾注释
+            # description 中的 ## 不能当注释截断
+            if stripped.lower().startswith("description"):
+                lines.append(stripped)
+                continue
+            # 去掉行尾单 # 注释；保留 ##
             if " #" in stripped:
-                stripped = stripped.split(" #", 1)[0].rstrip()
+                head, tail = stripped.split(" #", 1)
+                if not tail.startswith("#"):
+                    stripped = head.rstrip()
             lines.append(stripped)
     return lines
 

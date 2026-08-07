@@ -13,14 +13,22 @@ def _strip_config_line(line: str) -> str:
     清理配置行。
 
     - 整行 # 注释丢弃
-    - 仅将「空格 + #」视为行尾注释（VRP 常见）
+    - 仅将「空格 + 单 #」视为行尾注释（VRP 常见）
     - 保留 description 中的 ## 标记，避免被截成裸 description
+      （注意：` ##` 含有子串 ` #`，不能简单 split）
     """
     stripped = line.strip()
     if not stripped or stripped.startswith("#"):
         return ""
+    # description 行可能含 ##...##，整行保留
+    if stripped.lower().startswith("description"):
+        return stripped
+    # 行尾注释：匹配 " #comment"，但不匹配 " ##"
     if " #" in stripped:
-        stripped = stripped.split(" #", 1)[0].rstrip()
+        parts = stripped.split(" #", 1)
+        # 若切分后右侧以 # 开头，说明是 ##，不要截断
+        if not parts[1].startswith("#"):
+            stripped = parts[0].rstrip()
     return stripped
 
 

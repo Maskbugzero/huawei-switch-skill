@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.1] - 2026-08-07
+
+Live-device hardening from COM4 / SSH batch validation on S1730S.
+
+### Fixed
+- Console prompt detection no longer treats `Password:` as the device prompt after login
+- `is_prompt()` only matches CLI prompts so command reads are not truncated on auth banners
+- Interface-view prompts such as `[host-GigabitEthernet0/0/24]` are recognized; connect returns to user view
+- Planner/deployer no longer strip `description ##...##` into a bare incomplete `description`
+- netmiko 4.x: drop invalid `read_timeout` on `ConnectHandler` (use `send_command(read_timeout=...)`)
+
+### Added
+- `scripts/live_full_module_test.py` and `templates/_live_test_safe.j2` for optional live soak tests (env-based secrets)
+
+### Tests
+- **110 passed** (prompt semantics updated)
+
 ## [0.3.0] - 2026-08-06
 
 Production-hardening release: multi-interface deploy correctness, safe defaults, SSH batch skeleton, post-deploy shallow verify, golden fixtures.
@@ -58,6 +75,7 @@ Production-hardening release: multi-interface deploy correctness, safe defaults,
 
 - Core modules (console through verify) and AgentAdapter
 
+[0.3.1]: https://github.com/Maskbugzero/huawei-switch-skill/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/Maskbugzero/huawei-switch-skill/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/Maskbugzero/huawei-switch-skill/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/Maskbugzero/huawei-switch-skill/releases/tag/v0.1.0
