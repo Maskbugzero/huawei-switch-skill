@@ -129,7 +129,7 @@ response = adapter.execute(request)
 - 下发走 `CommandExecutor`（错误检测）
 - **SSH 真下发默认禁用**（`allow_ssh_deploy=False`）；仅 `dry_run=True` 或显式 `allow_ssh_deploy=True` 可走实验路径；连接在 `finally` 断开
 - **上联保护默认启用**（`allow_uplink_change=False`）；auto 识别 uplink 描述/宽 trunk
-- **SSH host key 默认拒绝未知**；`accept_unknown_host_key` 或 `HUAWEI_SSH_ACCEPT_UNKNOWN=1` 才 AutoAdd
+- **SSH host key 默认 AutoAdd（新机器）**；严格模式：`accept_unknown_host_key=False` 或 `HUAWEI_SSH_STRICT=1`
 - `DeviceInfo.baudrate` 传入 `SerialConfig`
 - `AgentRequest.allow_dangerous` / `auto_rollback_on_failure` / `allow_ssh_deploy` / `allow_uplink_change` 为一等字段
 - 异常/状态映射到 `CON*` / `CMD*` / `TPL*` / `DEP004-006` / `APT*` 错误码（见 SKILL 错误码矩阵）

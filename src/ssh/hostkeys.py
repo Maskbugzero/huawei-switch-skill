@@ -2,8 +2,11 @@
 """
 SSH 主机密钥策略。
 
-默认拒绝未知主机密钥（防 MITM）；仅在显式 accept_unknown_host_key=True
-或环境变量 HUAWEI_SSH_ACCEPT_UNKNOWN=1 时自动添加。
+默认场景：机房/新开箱交换机，**自动接受未知主机密钥**（AutoAdd）。
+若需严格校验，设置：
+  - DeviceInfo/SSHDevice(accept_unknown_host_key=False)
+  - 或环境变量 HUAWEI_SSH_STRICT=1
+  - 或 HUAWEI_SSH_ACCEPT_UNKNOWN=0
 """
 
 from __future__ import annotations
@@ -12,7 +15,6 @@ import os
 from pathlib import Path
 from typing import Any, Dict, Optional, Union
 
-import paramiko
 from paramiko import AutoAddPolicy, RejectPolicy, SSHClient
 from paramiko.client import MissingHostKeyPolicy
 
@@ -24,10 +26,26 @@ _DEFAULT_KNOWN_HOSTS = Path.home() / ".ssh" / "known_hosts"
 
 
 def resolve_accept_unknown(explicit: Optional[bool] = None) -> bool:
+    """
+    是否接受未知 host key。
+
+    优先级：显式参数 > 环境变量 > 默认 True（新机器友好）。
+    """
     if explicit is not None:
         return bool(explicit)
+
+    strict = os.environ.get("HUAWEI_SSH_STRICT", "").strip().lower()
+    if strict in {"1", "true", "yes", "on"}:
+        return False
+
     env = os.environ.get("HUAWEI_SSH_ACCEPT_UNKNOWN", "").strip().lower()
-    return env in {"1", "true", "yes", "on"}
+    if env in {"0", "false", "no", "off"}:
+        return False
+    if env in {"1", "true", "yes", "on"}:
+        return True
+
+    # 默认：新开箱/确认设备，直接接受
+    return True
 
 
 def resolve_known_hosts_path(path: Optional[Union[str, Path]] = None) -> Path:
@@ -39,12 +57,11 @@ def resolve_known_hosts_path(path: Optional[Union[str, Path]] = None) -> Path:
     return _DEFAULT_KNOWN_HOSTS
 
 
-def host_key_policy(accept_unknown: bool = False) -> MissingHostKeyPolicy:
+def host_key_policy(accept_unknown: bool = True) -> MissingHostKeyPolicy:
     if accept_unknown:
-        logger.warning(
-            "SSH accept_unknown_host_key=True: unknown host keys will be auto-added (MITM risk)"
-        )
+        logger.debug("SSH host key policy: AutoAdd (accept unknown)")
         return AutoAddPolicy()
+    logger.info("SSH host key policy: Reject unknown keys (strict)")
     return RejectPolicy()
 
 
@@ -62,7 +79,6 @@ def load_host_keys(client: SSHClient, known_hosts: Optional[Union[str, Path]] = 
         except Exception as e:
             logger.warning(f"failed to load host keys {kh}: {e}")
     else:
-        # 确保目录存在，便于 AutoAdd 时写入
         try:
             kh.parent.mkdir(parents=True, exist_ok=True)
         except Exception:
@@ -73,7 +89,7 @@ def load_host_keys(client: SSHClient, known_hosts: Optional[Union[str, Path]] = 
 def configure_paramiko_client(
     client: SSHClient,
     *,
-    accept_unknown: bool = False,
+    accept_unknown: bool = True,
     known_hosts: Optional[Union[str, Path]] = None,
 ) -> Path:
     kh = load_host_keys(client, known_hosts)
@@ -89,10 +105,8 @@ def netmiko_hostkey_kwargs(
     """
     供 netmiko ConnectHandler 使用的主机密钥相关参数。
 
-    - ssh_strict=True  => RejectPolicy（默认）
-    - ssh_strict=False => AutoAddPolicy
-    - system_host_keys=True 加载系统 known_hosts
-    - alt_key_file 指向项目/用户 known_hosts（若存在）
+    - 默认 accept_unknown=True => ssh_strict=False (AutoAdd)
+    - accept_unknown=False => ssh_strict=True (Reject)
     """
     accept = resolve_accept_unknown(accept_unknown)
     kh = resolve_known_hosts_path(known_hosts)

@@ -45,8 +45,11 @@ class SSHDevice(BaseModel):
     new_password: SecretStr = Field(default="", description="New password to set")
     port: int = Field(default=22, description="SSH port")
     accept_unknown_host_key: bool = Field(
-        default=False,
-        description="If True, auto-add unknown host keys (MITM risk). Default rejects unknown.",
+        default=True,
+        description=(
+            "If True (default), auto-add unknown host keys for new devices. "
+            "Set False for strict known_hosts checking."
+        ),
     )
 
 

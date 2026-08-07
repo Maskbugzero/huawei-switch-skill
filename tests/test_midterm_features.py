@@ -151,14 +151,18 @@ def test_error_code_matrix_helpers():
     assert code_for_deploy_status("success") is None
 
 
-def test_hostkey_policy_default_reject():
-    assert isinstance(host_key_policy(False), RejectPolicy)
+def test_hostkey_policy_default_accept_unknown():
+    """新机器场景：默认 AutoAdd；strict 时 Reject。"""
     assert isinstance(host_key_policy(True), AutoAddPolicy)
-    kw = netmiko_hostkey_kwargs(accept_unknown=False)
-    assert kw["ssh_strict"] is True
+    assert isinstance(host_key_policy(False), RejectPolicy)
+    kw = netmiko_hostkey_kwargs(accept_unknown=True)
+    assert kw["ssh_strict"] is False
     assert kw["system_host_keys"] is True
-    kw2 = netmiko_hostkey_kwargs(accept_unknown=True)
-    assert kw2["ssh_strict"] is False
+    kw2 = netmiko_hostkey_kwargs(accept_unknown=False)
+    assert kw2["ssh_strict"] is True
+    # 无显式参数时默认接受
+    kw3 = netmiko_hostkey_kwargs()
+    assert kw3["ssh_strict"] is False
 
 
 def test_adapter_passes_baudrate_to_serial_config():

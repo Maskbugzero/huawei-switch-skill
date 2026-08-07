@@ -267,7 +267,7 @@ SSH 真下发：默认 **禁用**。`connection_type="ssh"` 且 `action="deploy"
 
 上联保护：自动识别当前配置中 description 含 `uplink` 或宽 trunk（`2 to 4094`）的接口；若目标写成 access/port-security，则 `blocked`（`DEP005`）。也可用 `uplink_ports` / `protected_ports` 显式保护。放行：`allow_uplink_change=True`。
 
-SSH 主机密钥：默认 **拒绝未知密钥**（防 MITM）。信任已写入 `~/.ssh/known_hosts`（或 `HUAWEI_SSH_KNOWN_HOSTS`）。首次实验室环境可 `DeviceInfo(accept_unknown_host_key=True)` 或环境变量 `HUAWEI_SSH_ACCEPT_UNKNOWN=1`。
+SSH 主机密钥：默认 **自动接受未知密钥**（新开箱/确认设备场景）。写入 `~/.ssh/known_hosts`（或 `HUAWEI_SSH_KNOWN_HOSTS`）。若需严格校验：`accept_unknown_host_key=False` 或环境变量 `HUAWEI_SSH_STRICT=1`。
 
 自动回滚：默认 **关闭**。开启 `auto_rollback_on_failure=True` 时为实验性「备份逐行重放」，不保证完整恢复。
 
@@ -349,7 +349,7 @@ elif response.data.get("status") == "dry_run":
 | CON002 | 串口打开失败 | 占用/权限 |
 | CON003 | 登录失败 | 密码错误 / SSH 认证失败 |
 | CON004 | 设备无响应 | 超时/断开 |
-| CON005 | SSH 主机密钥不受信任 | 未知 host key 且未 `accept_unknown_host_key` |
+| CON005 | SSH 主机密钥不受信任 | 严格模式下未知 host key（`accept_unknown_host_key=False` / `HUAWEI_SSH_STRICT=1`） |
 | CMD001 | 命令执行失败 | 设备返回 Error |
 | TPL001 | 模板不存在 | 文件名错误 |
 | TPL002 | 模板渲染失败 | 缺变量（StrictUndefined） |

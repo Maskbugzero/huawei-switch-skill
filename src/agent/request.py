@@ -54,10 +54,10 @@ class DeviceInfo(BaseModel):
         description="Explicit connection type override. If set, takes precedence over heuristic detection."
     )
     accept_unknown_host_key: bool = Field(
-        default=False,
+        default=True,
         description=(
-            "SSH only: if True, auto-add unknown host keys (MITM risk). "
-            "Default False uses known_hosts + reject unknown."
+            "SSH only: if True (default), auto-add unknown host keys for new lab/gear. "
+            "Set False or HUAWEI_SSH_STRICT=1 for reject-unknown."
         ),
     )
 

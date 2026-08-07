@@ -85,7 +85,7 @@ class BatchSSHManager:
         inventory: DeviceInventory,
         backup_base_dir: str = "backups",
         read_timeout: int = 120,
-        accept_unknown_host_key: bool = False,
+        accept_unknown_host_key: bool = True,
     ) -> None:
         self.inventory = inventory
         self.exporter = ConfigExporter(base_dir=backup_base_dir)
@@ -98,7 +98,7 @@ class BatchSSHManager:
         cls,
         path: str | Path,
         backup_base_dir: str = "backups",
-        accept_unknown_host_key: bool = False,
+        accept_unknown_host_key: bool = True,
     ) -> "BatchSSHManager":
         return cls(
             load_inventory(path),

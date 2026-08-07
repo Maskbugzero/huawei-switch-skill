@@ -11,7 +11,7 @@ Medium-term hardening: uplink guard, SSH host keys, packaging/CI, error-code mat
 
 ### Security
 - **Uplink/port-role guard**: block turning auto-detected or explicit protected ports into access ports unless `allow_uplink_change=True`
-- **SSH host keys**: default reject unknown keys (`ssh_strict` / `RejectPolicy`); opt-in `accept_unknown_host_key` or `HUAWEI_SSH_ACCEPT_UNKNOWN=1`
+- **SSH host keys**: default **AutoAdd** for new lab/gear (`accept_unknown_host_key=True`); strict mode via `False` / `HUAWEI_SSH_STRICT=1`
 - SSH real deploy remains disabled by default (`allow_ssh_deploy`)
 
 ### Added
