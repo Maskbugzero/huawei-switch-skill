@@ -127,8 +127,8 @@ response = adapter.execute(request)
 - `auto_rollback_on_failure` **默认 False**（逐行重放备份为实验性）
 - Adapter：`success` 仅在 status ∈ {success, skipped, dry_run} 时为 True
 - 下发走 `CommandExecutor`（错误检测）
-- SSH deploy 同样默认 blocked + Error 检测；连接在 `finally` 断开
-- `AgentRequest.allow_dangerous` / `auto_rollback_on_failure` 为一等字段
+- **SSH 真下发默认禁用**（`allow_ssh_deploy=False`）；仅 `dry_run=True` 或显式 `allow_ssh_deploy=True` 可走实验路径；连接在 `finally` 断开
+- `AgentRequest.allow_dangerous` / `auto_rollback_on_failure` / `allow_ssh_deploy` 为一等字段
 - 异常映射到 `CON*` / `CMD*` / `TPL*` / `DEP*` / `APT*` 错误码
 
 ### 2. DeploymentPlanner（全面增强）
@@ -153,7 +153,7 @@ response = adapter.execute(request)
   - 绝不硬编码
   - 推荐使用环境变量或 `getpass` 传入
   - CLI 中的 `--password` 可能泄露到 shell history，生产环境优先使用 `AgentAdapter`
-- **Console 优先**：当前以串口为主，SSH 支持仍处于实验阶段
+- **Console 优先**：配置主路径是 Console；SSH 用于批量 backup/command。SSH 真下发默认禁用。
 
 ## 常用命令
 

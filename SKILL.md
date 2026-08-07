@@ -1,7 +1,7 @@
 ---
 name: huawei-switch-skill
 description: "Use when automating Huawei VRP switches: Console for single-device config/deploy, or SSH batch management (inventory backup/command) for managed fleets; also first-login password change."
-version: 0.3.0
+version: 0.3.2
 author: User
 license: MIT
 tags:
@@ -120,7 +120,7 @@ python -m venv .venv
 1. 机房串口改配置、开局、模板部署 → **Console + `AgentAdapter` / `DeploymentEngine`**
 2. 网上多台已通 SSH 的设备备份/巡检/跑命令 → **SSH 批量（`BatchSSHManager`）或 `DeviceInfo(connection_type="ssh")`**
 3. 出厂首次登录要改密 → **`SSHFirstConnect`**
-4. 单台 SSH deploy 可用但非主推；生产改配置优先 Console
+4. 单台 SSH deploy **默认禁用**；仅 `dry_run=True` 或显式 `allow_ssh_deploy=True` 才走实验路径。生产改配置优先 Console
 
 ## 快速开始
 
@@ -260,6 +260,8 @@ response = adapter.execute(request)
 幂等语义：**interface 感知意图子集**（目标接口块 ⊆ 同名接口当前配置；全局行在全局区匹配；**忽略 password/cipher 等密钥行**），不是整机配置全量相等，也不是无上下文扁平行集合。
 
 危险命令：默认关键词 `reboot/reset/delete/format/shutdown`（`undo shutdown` 不视为危险）。需显式 `allow_dangerous=True`（或 variables 中同名，支持字符串 `"true"`/`"false"`）才放行。**deploy 与 command（Console/SSH）均默认阻断**。
+
+SSH 真下发：默认 **禁用**。`connection_type="ssh"` 且 `action="deploy"` 时，除非 `dry_run=True` 或 `allow_ssh_deploy=True`（或 variables 同名），否则返回 `status=blocked` / `reason=ssh_deploy_disabled`（**不建立 SSH 连接**）。生产改配请用 Console。
 
 自动回滚：默认 **关闭**。开启 `auto_rollback_on_failure=True` 时为实验性「备份逐行重放」，不保证完整恢复。
 

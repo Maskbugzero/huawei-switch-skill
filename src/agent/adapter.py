@@ -84,6 +84,13 @@ def _resolve_auto_rollback(request: AgentRequest) -> bool:
     )
 
 
+def _resolve_allow_ssh_deploy(request: AgentRequest) -> bool:
+    """SSH 真下发需显式放行；dry_run 不受此开关限制。"""
+    if request.allow_ssh_deploy:
+        return True
+    return as_bool(request.variables.get("allow_ssh_deploy", False), default=False)
+
+
 def _blocked_dangerous_response(cmd: str) -> AgentResponse:
     return AgentResponse(
         success=False,
@@ -370,6 +377,29 @@ class AgentAdapter:
                 and not _resolve_allow_dangerous(request)
             ):
                 return _blocked_dangerous_response(cmd)
+
+        # deploy：默认禁止 SSH 真下发（生产改配请走 Console）
+        # dry_run=True 仍允许（仅模拟）；真下发需 allow_ssh_deploy=True
+        if request.action == "deploy":
+            if not request.dry_run and not _resolve_allow_ssh_deploy(request):
+                return AgentResponse(
+                    success=False,
+                    code=APT002.code,
+                    message=(
+                        "SSH deploy is disabled by default; "
+                        "use Console deploy, or pass dry_run=True / allow_ssh_deploy=True"
+                    ),
+                    error="ssh_deploy_disabled",
+                    data={
+                        "status": "blocked",
+                        "reason": "ssh_deploy_disabled",
+                        "transport": "ssh",
+                        "hint": (
+                            "Console is the config primary path. "
+                            "SSH deploy is experimental and incomplete vs DeploymentEngine."
+                        ),
+                    },
+                )
 
         logger.info(f"SSH 模式执行 action={request.action}，目标: {host}:{port}")
 

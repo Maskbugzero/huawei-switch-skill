@@ -21,7 +21,7 @@ Console 与 SSH **只是连接方式不同，VRP 命令相同**。当前配置�
 
 ## 项目状态
 
-**当前版本：0.3.0**（见 `CHANGELOG.md` / `src.__version__`）
+**当前版本：0.3.2**（见 `CHANGELOG.md` / `src.__version__`）
 
 已完成 agent.md（历史文档）路线图 **第 1~7 阶段**，并完成配置主路径正确性加固、SSH 批量骨架、部署后浅层校验与金样例测试。
 
@@ -132,6 +132,8 @@ huawei-switch-skill/
 
 ## 最近改进（2026-08）
 
+- **0.3.2**：SSH 真下发默认禁用（需 `allow_ssh_deploy=True` 或仅 `dry_run`）；版本/LICENSE/联调产物忽略对齐
+- **0.3.1**：Console 提示符/接口视图/description `##`/netmiko 4.x 真机加固
 - **部署引擎安全默认**：
   - 幂等：意图子集匹配（非整机全量相等）
   - 危险命令默认 `blocked`（需 `allow_dangerous=True`）

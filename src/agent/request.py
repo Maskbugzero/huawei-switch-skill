@@ -117,6 +117,13 @@ class AgentRequest(BaseModel):
         default=True,
         description="If True (default), run shallow post-deploy verification (sysname/vlan/ssh)",
     )
+    allow_ssh_deploy: bool = Field(
+        default=False,
+        description=(
+            "If True, allow real SSH deploy (experimental). Default False: "
+            "SSH deploy is blocked unless dry_run=True. Prefer Console deploy."
+        ),
+    )
 
     def to_dict(self) -> Dict[str, Any]:
         """序列化为字典（便于 JSON 传输）"""

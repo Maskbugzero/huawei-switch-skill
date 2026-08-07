@@ -98,3 +98,7 @@ configs/*
 *.swp
 *~
 .DS_Store
+
+# 本地真机联调产物（可能含路径/设备信息）
+_live_partial_results.json
+_live_*.json

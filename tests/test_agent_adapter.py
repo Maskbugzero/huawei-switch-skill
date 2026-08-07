@@ -319,6 +319,58 @@ def test_ssh_empty_command_still_disconnects():
     ch.assert_not_called()
 
 
+def test_ssh_deploy_disabled_by_default_without_connect():
+    """SSH 真下发默认禁用，且不建立连接。"""
+    adapter = AgentAdapter()
+    mock_ssh = MagicMock()
+
+    with patch("src.agent.adapter.ConnectHandler", return_value=mock_ssh) as ch:
+        response = adapter.execute(
+            AgentRequest(
+                action="deploy",
+                device=DeviceInfo(port="10.0.0.1", password="xxx", connection_type="ssh"),
+                template="access_switch.j2",
+                variables={"hostname": "X", "admin_password": "Secret@2026"},
+                backup=False,
+                dry_run=False,
+            )
+        )
+
+    assert response.success is False
+    assert response.data.get("status") == "blocked"
+    assert response.data.get("reason") == "ssh_deploy_disabled"
+    assert response.code == "APT002"
+    ch.assert_not_called()
+
+
+def test_ssh_deploy_dry_run_allowed_without_allow_flag():
+    """dry_run=True 时允许 SSH deploy 模拟，无需 allow_ssh_deploy。"""
+    adapter = AgentAdapter()
+    mock_ssh = MagicMock()
+    mock_ssh.send_command.return_value = "sysname OLD"
+
+    with patch("src.agent.adapter.ConnectHandler", return_value=mock_ssh), \
+         patch("src.agent.adapter.TemplateRenderer") as mock_renderer_cls:
+        mock_renderer = MagicMock()
+        mock_renderer.render.return_value = "sysname NEW\nvlan batch 10"
+        mock_renderer_cls.return_value = mock_renderer
+
+        response = adapter.execute(
+            AgentRequest(
+                action="deploy",
+                device=DeviceInfo(port="10.0.0.1", password="xxx", connection_type="ssh"),
+                template="access_switch.j2",
+                variables={"hostname": "NEW", "admin_password": "Secret@2026"},
+                backup=False,
+                dry_run=True,
+            )
+        )
+
+    assert response.success is True
+    assert response.data.get("status") == "dry_run"
+    mock_ssh.disconnect.assert_called()
+
+
 def test_ssh_deploy_blocks_dangerous_commands():
     """SSH deploy 应与 Console 一样默认阻断危险命令。"""
     adapter = AgentAdapter()
@@ -338,6 +390,7 @@ def test_ssh_deploy_blocks_dangerous_commands():
                 template="access_switch.j2",
                 variables={"hostname": "X", "admin_password": "Secret@2026"},
                 backup=False,
+                allow_ssh_deploy=True,
             )
         )
 
@@ -378,6 +431,7 @@ def test_ssh_deploy_detects_error_in_output():
                 template="access_switch.j2",
                 variables={"hostname": "NEW", "admin_password": "Secret@2026"},
                 backup=False,
+                allow_ssh_deploy=True,
             )
         )
 
