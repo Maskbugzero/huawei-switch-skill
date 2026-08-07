@@ -3,7 +3,7 @@
 SSH 首次连接 + 强制修改密码模块。
 
 参考实机使用脚本封装，支持：
-- 自动接受主机指纹
+- 主机密钥校验（默认拒绝未知；显式 accept_unknown_host_key 才 AutoAdd）
 - 处理“需要修改密码”交互流程
 - 改密成功后重新验证
 - 改密后自动备份配置（可选）
@@ -16,11 +16,12 @@ import time
 from typing import Optional
 
 import paramiko
-from paramiko import SSHClient, AutoAddPolicy
+from paramiko import SSHClient
 from netmiko import ConnectHandler
 from pydantic import BaseModel, ConfigDict, Field, SecretStr
 
 from src.console.logger import get_logger
+from src.ssh.hostkeys import configure_paramiko_client, netmiko_hostkey_kwargs, resolve_accept_unknown
 
 logger = get_logger("ssh.first_connect")
 
@@ -43,6 +44,10 @@ class SSHDevice(BaseModel):
     old_password: SecretStr = Field(default="", description="Old password for first connect")
     new_password: SecretStr = Field(default="", description="New password to set")
     port: int = Field(default=22, description="SSH port")
+    accept_unknown_host_key: bool = Field(
+        default=False,
+        description="If True, auto-add unknown host keys (MITM risk). Default rejects unknown.",
+    )
 
 
 class SSHFirstConnect:
@@ -140,7 +145,8 @@ class SSHFirstConnect:
         logger.info(f"用户名: {self.device.username}")
 
         self.client = SSHClient()
-        self.client.set_missing_host_key_policy(AutoAddPolicy())
+        accept = resolve_accept_unknown(self.device.accept_unknown_host_key)
+        configure_paramiko_client(self.client, accept_unknown=accept)
 
         try:
             # 第一次连接
@@ -222,7 +228,8 @@ class SSHFirstConnect:
         """使用新密码重新登录验证。"""
         logger.info("=== 使用新密码重新登录验证 ===")
         client2 = SSHClient()
-        client2.set_missing_host_key_policy(AutoAddPolicy())
+        accept = resolve_accept_unknown(self.device.accept_unknown_host_key)
+        configure_paramiko_client(client2, accept_unknown=accept)
 
         try:
             client2.connect(
@@ -266,6 +273,9 @@ class SSHFirstConnect:
                 "username": self.device.username,
                 "password": self.device.new_password.get_secret_value(),
                 "port": self.device.port,
+                **netmiko_hostkey_kwargs(
+                    accept_unknown=self.device.accept_unknown_host_key
+                ),
             }
             conn = ConnectHandler(**device)
             conn.send_command("screen-length 0 temporary")

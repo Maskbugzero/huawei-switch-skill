@@ -3,6 +3,8 @@
 统一错误码定义。
 
 错误码格式：前缀 + 3位数字
+
+完整矩阵见 SKILL.md「错误码矩阵」章节。
 """
 
 from __future__ import annotations
@@ -23,6 +25,7 @@ CON001 = ErrorCode("CON001", "connection", "串口未找到")
 CON002 = ErrorCode("CON002", "connection", "串口打开失败")
 CON003 = ErrorCode("CON003", "connection", "登录失败")
 CON004 = ErrorCode("CON004", "connection", "设备无响应")
+CON005 = ErrorCode("CON005", "connection", "SSH 主机密钥不受信任")
 
 # 配置相关
 CFG001 = ErrorCode("CFG001", "configuration", "命令执行失败")
@@ -51,6 +54,9 @@ TPL003 = ErrorCode("TPL003", "template", "模板变量缺失")
 DEP001 = ErrorCode("DEP001", "deploy", "部署命令执行失败")
 DEP002 = ErrorCode("DEP002", "deploy", "部署前配置采集失败")
 DEP003 = ErrorCode("DEP003", "deploy", "部署后配置校验失败")
+DEP004 = ErrorCode("DEP004", "deploy", "危险命令被阻断")
+DEP005 = ErrorCode("DEP005", "deploy", "上联/保护口变更被阻断")
+DEP006 = ErrorCode("DEP006", "deploy", "SSH 真下发被禁用")
 
 # 命令执行相关
 CMD001 = ErrorCode("CMD001", "command", "命令执行失败")
@@ -62,3 +68,24 @@ APT001 = ErrorCode("APT001", "adapter", "无效请求")
 APT002 = ErrorCode("APT002", "adapter", "不支持的操作")
 APT003 = ErrorCode("APT003", "adapter", "请求验证失败")
 APT004 = ErrorCode("APT004", "adapter", "执行超时")
+
+
+def code_for_deploy_status(status: Optional[str], reason: str = "") -> Optional[str]:
+    """根据 deploy report status/reason 选择错误码。"""
+    st = (status or "").lower()
+    r = (reason or "").lower()
+    if st in {"success", "skipped", "dry_run"}:
+        return None
+    if st == "verify_failed":
+        return DEP003.code
+    if st == "blocked":
+        if "ssh_deploy" in r or "ssh deploy" in r:
+            return DEP006.code
+        if "uplink" in r or "protected" in r:
+            return DEP005.code
+        if "dangerous" in r:
+            return DEP004.code
+        return DEP001.code
+    if st == "failed":
+        return DEP001.code
+    return DEP001.code

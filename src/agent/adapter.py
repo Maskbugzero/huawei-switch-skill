@@ -35,14 +35,21 @@ from src.agent.error_codes import (
     CMD001,
     CON003,
     CON004,
+    CON005,
     DEP001,
+    DEP003,
+    DEP004,
+    DEP005,
+    DEP006,
     TPL001,
     TPL002,
     VAL001,
+    code_for_deploy_status,
 )
 from src.agent.request import AgentRequest, AgentResponse
 from src.agent.utils import as_bool
 from src.console.logger import get_logger
+from src.console.serial_manager import SerialConfig
 from src.command import CommandExecutor, ErrorDetector
 from src.command.exceptions import CommandExecutionError
 from src.deploy.deployer import (
@@ -51,7 +58,9 @@ from src.deploy.deployer import (
     configs_intent_differs,
 )
 from src.deploy.planner import DeploymentPlanner
+from src.deploy.port_guard import check_uplink_protection
 from src.template import TemplateRenderer
+from src.ssh.hostkeys import netmiko_hostkey_kwargs, resolve_accept_unknown
 
 logger = get_logger("agent")
 
@@ -94,7 +103,7 @@ def _resolve_allow_ssh_deploy(request: AgentRequest) -> bool:
 def _blocked_dangerous_response(cmd: str) -> AgentResponse:
     return AgentResponse(
         success=False,
-        code=DEP001.code,
+        code=DEP004.code,
         message=(
             "dangerous command blocked; pass allow_dangerous=True to override"
         ),
@@ -107,12 +116,22 @@ def _blocked_dangerous_response(cmd: str) -> AgentResponse:
     )
 
 
+def _resolve_allow_uplink_change(request: AgentRequest) -> bool:
+    if request.allow_uplink_change:
+        return True
+    return as_bool(request.variables.get("allow_uplink_change", False), default=False)
+
+
 def _map_exception_code(exc: BaseException) -> str:
     """将异常映射到统一错误码。"""
     if isinstance(exc, AuthenticationError):
         return CON003.code
     if isinstance(exc, (ConsoleDisconnect, ConsoleTimeout)):
         return CON004.code
+    if isinstance(exc, paramiko.BadHostKeyException):
+        return CON005.code
+    if isinstance(exc, paramiko.SSHException) and "not found in known_hosts" in str(exc).lower():
+        return CON005.code
     if isinstance(exc, paramiko.AuthenticationException):
         return CON003.code
     if isinstance(exc, CommandExecutionError):
@@ -129,18 +148,14 @@ def _map_exception_code(exc: BaseException) -> str:
 def _response_from_deploy_report(report: Dict[str, Any]) -> AgentResponse:
     status = report.get("status")
     ok = status in _SUCCESS_STATUSES
-    code = None
-    if not ok:
-        if status == "blocked":
-            code = DEP001.code
-        else:
-            code = DEP001.code
+    reason = report.get("reason") or report.get("error") or ""
+    code = None if ok else code_for_deploy_status(status, str(reason))
     return AgentResponse(
         success=ok,
         code=code,
         data=report,
-        message=report.get("reason") or report.get("error") or "",
-        error=None if ok else (report.get("error") or report.get("reason")),
+        message=reason or "",
+        error=None if ok else reason,
     )
 
 
@@ -204,6 +219,7 @@ class AgentAdapter:
             with Connection(
                 port=request.device.port,
                 password=password_value,
+                config=SerialConfig(baudrate=request.device.baudrate),
             ) as conn:
                 if request.action == "backup":
                     from src.backup import ConfigCollector, ConfigExporter
@@ -221,6 +237,7 @@ class AgentAdapter:
                     auto_rollback = _resolve_auto_rollback(request)
                     save = _resolve_save(request)
                     verify = _resolve_verify(request)
+                    allow_uplink = _resolve_allow_uplink_change(request)
                     engine = DeploymentEngine()
                     report = engine.deploy(
                         connection=conn,
@@ -233,6 +250,7 @@ class AgentAdapter:
                         auto_rollback_on_failure=auto_rollback,
                         save=save,
                         verify=verify,
+                        allow_uplink_change=allow_uplink,
                     )
                     return _response_from_deploy_report(report)
 
@@ -384,7 +402,7 @@ class AgentAdapter:
             if not request.dry_run and not _resolve_allow_ssh_deploy(request):
                 return AgentResponse(
                     success=False,
-                    code=APT002.code,
+                    code=DEP006.code,
                     message=(
                         "SSH deploy is disabled by default; "
                         "use Console deploy, or pass dry_run=True / allow_ssh_deploy=True"
@@ -403,6 +421,10 @@ class AgentAdapter:
 
         logger.info(f"SSH 模式执行 action={request.action}，目标: {host}:{port}")
 
+        accept_unknown = resolve_accept_unknown(
+            request.device.accept_unknown_host_key
+            or as_bool(request.variables.get("accept_unknown_host_key", False), default=False)
+        )
         # netmiko 4.x：ConnectHandler 无 read_timeout 参数；读超时在 send_command 上传
         ssh_device = {
             "device_type": "huawei_vrp",
@@ -411,6 +433,7 @@ class AgentAdapter:
             "password": password,
             "port": port,
             "conn_timeout": 30,
+            **netmiko_hostkey_kwargs(accept_unknown=accept_unknown),
         }
 
         conn = None
@@ -509,6 +532,31 @@ class AgentAdapter:
 
         allow_dangerous = _resolve_allow_dangerous(request)
 
+        # 采集当前配置（幂等 + 上联检测）
+        current_config: Optional[str] = None
+        try:
+            current_config = conn.send_command(
+                "display current-configuration", read_timeout=120
+            )
+        except Exception as e:
+            logger.warning(f"SSH deploy 采集当前配置失败，跳过幂等/上联部分检查: {e}")
+
+        uplink_ok, uplink_reason, uplink_details = check_uplink_protection(
+            target_config,
+            variables=request.variables,
+            current_config=current_config,
+            allow_uplink_change=_resolve_allow_uplink_change(request),
+        )
+        if not uplink_ok:
+            return _response_from_deploy_report(
+                {
+                    "status": "blocked",
+                    "reason": uplink_reason,
+                    "uplink_guard": uplink_details,
+                    "transport": "ssh",
+                }
+            )
+
         # 危险命令默认阻断
         dangerous_commands = [
             line.strip()
@@ -526,15 +574,6 @@ class AgentAdapter:
                     "transport": "ssh",
                 }
             )
-
-        # 采集当前配置 + 意图子集匹配
-        current_config: Optional[str] = None
-        try:
-            current_config = conn.send_command(
-                "display current-configuration", read_timeout=120
-            )
-        except Exception as e:
-            logger.warning(f"SSH deploy 采集当前配置失败，跳过幂等性检查: {e}")
 
         if current_config is not None:
             is_different, diff_summary = configs_intent_differs(

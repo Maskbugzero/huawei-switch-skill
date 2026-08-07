@@ -21,7 +21,7 @@ Console 与 SSH **只是连接方式不同，VRP 命令相同**。当前配置�
 
 ## 项目状态
 
-**当前版本：0.3.2**（见 `CHANGELOG.md` / `src.__version__`）
+**当前版本：0.4.0**（见 `CHANGELOG.md` / `src.__version__`）
 
 已完成 agent.md（历史文档）路线图 **第 1~7 阶段**，并完成配置主路径正确性加固、SSH 批量骨架、部署后浅层校验与金样例测试。
 
@@ -132,15 +132,17 @@ huawei-switch-skill/
 
 ## 最近改进（2026-08）
 
+- **0.4.0（中期）**：上联口保护、SSH known_hosts 默认拒绝未知密钥、错误码矩阵、baudrate 接线、`pyproject.toml` + CI、依赖拆分
 - **0.3.2**：SSH 真下发默认禁用（需 `allow_ssh_deploy=True` 或仅 `dry_run`）；版本/LICENSE/联调产物忽略对齐
 - **0.3.1**：Console 提示符/接口视图/description `##`/netmiko 4.x 真机加固
 - **部署引擎安全默认**：
   - 幂等：意图子集匹配（非整机全量相等）
   - 危险命令默认 `blocked`（需 `allow_dangerous=True`）
+  - 上联/保护口默认 `blocked`（需 `allow_uplink_change=True`）
   - 自动回滚默认关闭（实验性）
   - `AgentResponse.success` 随 `status` 正确反映失败/阻断
   - 主路径经 `CommandExecutor` 做错误检测
-- **模板**：`admin_password` 必填，无弱默认口令
+- **模板**：`admin_password` 必填；access 模板端口范围可配（默认 1–16）
 - 测试覆盖失败路径与 SSH 探测启发式
 
 ## 测试

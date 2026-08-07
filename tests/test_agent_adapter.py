@@ -339,7 +339,7 @@ def test_ssh_deploy_disabled_by_default_without_connect():
     assert response.success is False
     assert response.data.get("status") == "blocked"
     assert response.data.get("reason") == "ssh_deploy_disabled"
-    assert response.code == "APT002"
+    assert response.code == "DEP006"
     ch.assert_not_called()
 
 

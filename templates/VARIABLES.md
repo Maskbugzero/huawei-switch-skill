@@ -61,6 +61,20 @@
 | `room` | string | `"01"` | 房间号（用于端口描述） |
 | `max_mac` | string | `"2"` | 端口安全最大 MAC 数 |
 | `access_ports` | list | - | 接入端口列表（minimal 模板专用） |
+| `port_prefix` | string | `"GigabitEthernet0/0/"` | 接入口名前缀 |
+| `access_port_start` | int | `1` | 接入口起始编号 |
+| `access_port_end` | int | `16` | 接入口结束编号（默认避开尾部上联） |
+| `uplink_ports` / `protected_ports` | list/string | - | **显式保护口**：部署默认禁止改成 access（除非 `allow_uplink_change=True`） |
+| `monitor_port` | string | - | 可选镜像口；未定义则不生成 observe-port |
+
+### 上联保护说明
+
+部署引擎会：
+1. 读取 `uplink_ports` / `protected_ports` 显式列表  
+2. 从当前 running-config **自动识别** description 含 `uplink` 或宽 trunk（`2 to 4094`）的接口  
+3. 若目标配置试图把这些口改成 **access**（含 port-security），则 `status=blocked`（`DEP005`）
+
+合法地配置 trunk 上联（模板中的 `uplink`）**不会**被 auto 规则误杀。
 
 ---
 

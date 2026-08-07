@@ -11,6 +11,7 @@ from __future__ import annotations
 from src.ssh.first_connect import SSHFirstConnect, SSHDevice
 from src.ssh.batch import BatchSSHManager, BatchReport, DeviceResult
 from src.ssh.inventory import DeviceInventory, InventoryDevice, load_inventory
+from src.ssh.hostkeys import configure_paramiko_client, netmiko_hostkey_kwargs
 
 __all__ = [
     "SSHFirstConnect",
@@ -21,4 +22,6 @@ __all__ = [
     "DeviceInventory",
     "InventoryDevice",
     "load_inventory",
+    "configure_paramiko_client",
+    "netmiko_hostkey_kwargs",
 ]

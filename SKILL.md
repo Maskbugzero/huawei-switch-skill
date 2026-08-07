@@ -1,7 +1,7 @@
 ---
 name: huawei-switch-skill
 description: "Use when automating Huawei VRP switches: Console for single-device config/deploy, or SSH batch management (inventory backup/command) for managed fleets; also first-login password change."
-version: 0.3.2
+version: 0.4.0
 author: User
 license: MIT
 tags:
@@ -255,13 +255,19 @@ response = adapter.execute(request)
 | 目标意图已满足（子集）   | `skipped`       | True                    | 目标行均已在当前配置中 |
 | `dry_run=True`           | `dry_run`       | True                    | 仅模拟 |
 | 检测到危险命令且未放行   | `blocked`       | False                   | 默认安全策略 |
+| 触及上联/保护口（改 access） | `blocked`    | False                   | 需 `allow_uplink_change=True` |
 | 部署失败                 | `failed`        | False                   | 默认不自动回滚 |
+| 部署后校验失败           | `verify_failed` | False                   | `DEP003` |
 
 幂等语义：**interface 感知意图子集**（目标接口块 ⊆ 同名接口当前配置；全局行在全局区匹配；**忽略 password/cipher 等密钥行**），不是整机配置全量相等，也不是无上下文扁平行集合。
 
 危险命令：默认关键词 `reboot/reset/delete/format/shutdown`（`undo shutdown` 不视为危险）。需显式 `allow_dangerous=True`（或 variables 中同名，支持字符串 `"true"`/`"false"`）才放行。**deploy 与 command（Console/SSH）均默认阻断**。
 
-SSH 真下发：默认 **禁用**。`connection_type="ssh"` 且 `action="deploy"` 时，除非 `dry_run=True` 或 `allow_ssh_deploy=True`（或 variables 同名），否则返回 `status=blocked` / `reason=ssh_deploy_disabled`（**不建立 SSH 连接**）。生产改配请用 Console。
+SSH 真下发：默认 **禁用**。`connection_type="ssh"` 且 `action="deploy"` 时，除非 `dry_run=True` 或 `allow_ssh_deploy=True`（或 variables 同名），否则返回 `status=blocked` / `reason=ssh_deploy_disabled`（**不建立 SSH 连接**，错误码 `DEP006`）。生产改配请用 Console。
+
+上联保护：自动识别当前配置中 description 含 `uplink` 或宽 trunk（`2 to 4094`）的接口；若目标写成 access/port-security，则 `blocked`（`DEP005`）。也可用 `uplink_ports` / `protected_ports` 显式保护。放行：`allow_uplink_change=True`。
+
+SSH 主机密钥：默认 **拒绝未知密钥**（防 MITM）。信任已写入 `~/.ssh/known_hosts`（或 `HUAWEI_SSH_KNOWN_HOSTS`）。首次实验室环境可 `DeviceInfo(accept_unknown_host_key=True)` 或环境变量 `HUAWEI_SSH_ACCEPT_UNKNOWN=1`。
 
 自动回滚：默认 **关闭**。开启 `auto_rollback_on_failure=True` 时为实验性「备份逐行重放」，不保证完整恢复。
 
@@ -333,6 +339,31 @@ elif response.data.get("status") == "dry_run":
 - 密码勿硬编码；CLI `--password` 可能进 shell 历史
 - 推荐显式 `DeviceInfo.connection_type`（`console` / `ssh`）
 - 批量设备清单见 `configs/devices.example.yaml`，勿提交真实密码
+- Console 波特率：`DeviceInfo.baudrate`（默认 9600）会传到串口
+
+## 错误码矩阵
+
+| 码 | 含义 | 典型触发 |
+|----|------|----------|
+| CON001 | 串口未找到 | 端口不存在 |
+| CON002 | 串口打开失败 | 占用/权限 |
+| CON003 | 登录失败 | 密码错误 / SSH 认证失败 |
+| CON004 | 设备无响应 | 超时/断开 |
+| CON005 | SSH 主机密钥不受信任 | 未知 host key 且未 `accept_unknown_host_key` |
+| CMD001 | 命令执行失败 | 设备返回 Error |
+| TPL001 | 模板不存在 | 文件名错误 |
+| TPL002 | 模板渲染失败 | 缺变量（StrictUndefined） |
+| DEP001 | 部署失败 | 下发中断/其他 deploy 失败 |
+| DEP003 | 部署后校验失败 | `verify_failed` |
+| DEP004 | 危险命令阻断 | reboot/reset/... 未 `allow_dangerous` |
+| DEP005 | 上联/保护口阻断 | 误改 uplink 为 access |
+| DEP006 | SSH 真下发禁用 | 未 `allow_ssh_deploy` 且非 dry_run |
+| VAL001 | 校验失败 | validate action |
+| APT001 | 无效请求 | 缺字段 |
+| APT002 | 不支持的操作 | 非法 action |
+| BKP001 / RBK001 | 备份/回滚失败 | 预留 |
+
+`AgentResponse.code` 在失败时尽量填充上表码；`data.status` 仍是细粒度状态。
 
 ## 相关文档
 

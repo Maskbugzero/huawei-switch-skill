@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-08-07
+
+Medium-term hardening: uplink guard, SSH host keys, packaging/CI, error-code matrix, baudrate.
+
+### Security
+- **Uplink/port-role guard**: block turning auto-detected or explicit protected ports into access ports unless `allow_uplink_change=True`
+- **SSH host keys**: default reject unknown keys (`ssh_strict` / `RejectPolicy`); opt-in `accept_unknown_host_key` or `HUAWEI_SSH_ACCEPT_UNKNOWN=1`
+- SSH real deploy remains disabled by default (`allow_ssh_deploy`)
+
+### Added
+- `src/deploy/port_guard.py` + deploy integration
+- `src/ssh/hostkeys.py`; wired into AgentAdapter / BatchSSHManager / SSHFirstConnect
+- `AgentRequest.allow_uplink_change`, `DeviceInfo.accept_unknown_host_key`
+- Error codes: `CON005`, `DEP004`–`DEP006` + `code_for_deploy_status()` mapping
+- `pyproject.toml`, `requirements-dev.txt`, GitHub Actions CI (pytest on 3.10–3.12)
+- access_switch template: `port_prefix` / `access_port_start` / `access_port_end` (default 1–16)
+
+### Fixed
+- `DeviceInfo.baudrate` now passed into `SerialConfig` / `Connection`
+
+### Tests
+- **129 passed**
+
 ## [0.3.2] - 2026-08-07
 
 Short-term hardening: version alignment, SSH deploy guard, license, regression tests.
@@ -94,6 +117,7 @@ Production-hardening release: multi-interface deploy correctness, safe defaults,
 
 - Core modules (console through verify) and AgentAdapter
 
+[0.4.0]: https://github.com/Maskbugzero/huawei-switch-skill/compare/v0.3.2...v0.4.0
 [0.3.2]: https://github.com/Maskbugzero/huawei-switch-skill/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/Maskbugzero/huawei-switch-skill/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/Maskbugzero/huawei-switch-skill/compare/v0.2.0...v0.3.0

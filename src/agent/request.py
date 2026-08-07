@@ -53,6 +53,13 @@ class DeviceInfo(BaseModel):
         default=None,
         description="Explicit connection type override. If set, takes precedence over heuristic detection."
     )
+    accept_unknown_host_key: bool = Field(
+        default=False,
+        description=(
+            "SSH only: if True, auto-add unknown host keys (MITM risk). "
+            "Default False uses known_hosts + reject unknown."
+        ),
+    )
 
     def is_ssh(self) -> bool:
         """判断是否为 SSH 连接。"""
@@ -122,6 +129,13 @@ class AgentRequest(BaseModel):
         description=(
             "If True, allow real SSH deploy (experimental). Default False: "
             "SSH deploy is blocked unless dry_run=True. Prefer Console deploy."
+        ),
+    )
+    allow_uplink_change: bool = Field(
+        default=False,
+        description=(
+            "If True, allow deploy to modify interfaces listed in uplink_ports/"
+            "protected_ports or auto-detected uplink-like ports. Default False."
         ),
     )
 

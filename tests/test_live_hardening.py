@@ -73,6 +73,7 @@ def test_batch_connecthandler_no_read_timeout_kwarg():
     kwargs = ch.call_args.kwargs
     assert "read_timeout" not in kwargs
     assert kwargs.get("host") == "10.0.0.1"
+    assert kwargs.get("ssh_strict") is True
     # read timeout 应在 send_command 上
     mock_conn.send_command.assert_called()
     call_kwargs = mock_conn.send_command.call_args.kwargs

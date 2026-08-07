@@ -15,10 +15,12 @@ from src.template import TemplateRenderer
 from src.backup import ConfigCollector, ConfigExporter
 from src.deploy.rollback import RollbackManager
 from src.deploy.planner import DeploymentPlanner
+from src.deploy.port_guard import check_uplink_protection
 from src.command.executor import CommandExecutor
 from src.command.exceptions import CommandExecutionError
 from src.verify import ConfigVerifier
 from src.verify.rules import build_expected_from_variables
+from src.agent.utils import as_bool
 
 logger = get_logger("deploy")
 
@@ -237,6 +239,7 @@ class DeploymentEngine:
         allow_dangerous: bool = False,
         save: bool = True,
         verify: bool = True,
+        allow_uplink_change: bool = False,
     ) -> Dict[str, Any]:
         """
         执行部署流程（支持幂等性和 Dry-Run）。
@@ -245,29 +248,20 @@ class DeploymentEngine:
         - 采集当前配置，用「interface 感知意图子集匹配」判断是否需要下发
         - dry_run=True 时仅模拟，不下发配置
         - 危险命令默认阻断（allow_dangerous=True 才放行）
+        - 上联/保护口默认阻断（allow_uplink_change=True 才放行）
         - 自动回滚默认关闭（running-config 逐行重放不安全）
         - 通过 CommandExecutor 下发，带错误检测
         - 成功后默认 save=True 落盘
         - 成功后默认 verify=True 浅层校验（sysname/vlan/ssh）
-
-        Args:
-            connection: 已建立的 Connection 对象
-            template: Jinja2 模板文件名
-            variables: 模板变量（须含 admin_password 等必要变量）
-            backup: 是否在部署前备份当前配置
-            device_name: 设备名称（用于备份目录）
-            auto_rollback_on_failure: 失败时是否自动回滚（默认 False，实验性）
-            dry_run: 是否仅模拟执行（不真正下发命令）
-            dangerous_keywords: 自定义危险命令关键词列表
-            allow_dangerous: 是否允许下发危险命令（默认 False）
-            save: 部署成功后是否执行 save（默认 True）
-            verify: 部署成功后是否做浅层校验（默认 True）
-
-        Returns:
-            dict: 包含 status、steps、reason、changes_detected 等信息的报告
         """
         if dangerous_keywords is None:
             dangerous_keywords = list(DEFAULT_DANGEROUS_KEYWORDS)
+
+        # variables 也可覆盖 allow_uplink_change（字符串布尔安全解析）
+        if not allow_uplink_change:
+            allow_uplink_change = as_bool(
+                (variables or {}).get("allow_uplink_change", False), default=False
+            )
 
         report: Dict[str, Any] = {"status": "success", "steps": []}
         backup_path = None
@@ -310,6 +304,21 @@ class DeploymentEngine:
         # 2. 渲染配置
         config_text = self.renderer.render(template, variables)
         report["steps"].append("render")
+
+        # 2b. 上联/保护口检查（在危险命令检查之前，尽早失败）
+        uplink_ok, uplink_reason, uplink_details = check_uplink_protection(
+            config_text,
+            variables=variables,
+            current_config=current_config,
+            allow_uplink_change=allow_uplink_change,
+        )
+        report["uplink_guard"] = uplink_details
+        if not uplink_ok:
+            report["status"] = "blocked"
+            report["reason"] = uplink_reason
+            report["steps"].append("uplink_guard")
+            logger.warning(f"上联保护阻断: {uplink_reason}")
+            return report
 
         # 安全检查：检测危险命令（默认阻断）
         dangerous_commands = [

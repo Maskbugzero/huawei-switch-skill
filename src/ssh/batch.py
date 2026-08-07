@@ -20,6 +20,7 @@ from src.backup import ConfigExporter
 from src.command.error_detector import ErrorDetector
 from src.console.logger import get_logger
 from src.deploy.deployer import DEFAULT_DANGEROUS_KEYWORDS, _line_is_dangerous
+from src.ssh.hostkeys import netmiko_hostkey_kwargs, resolve_accept_unknown
 from src.ssh.inventory import DeviceInventory, InventoryDevice, load_inventory
 
 logger = get_logger("ssh.batch")
@@ -84,10 +85,12 @@ class BatchSSHManager:
         inventory: DeviceInventory,
         backup_base_dir: str = "backups",
         read_timeout: int = 120,
+        accept_unknown_host_key: bool = False,
     ) -> None:
         self.inventory = inventory
         self.exporter = ConfigExporter(base_dir=backup_base_dir)
         self.read_timeout = read_timeout
+        self.accept_unknown_host_key = resolve_accept_unknown(accept_unknown_host_key)
         self._error_detector = ErrorDetector()
 
     @classmethod
@@ -95,8 +98,13 @@ class BatchSSHManager:
         cls,
         path: str | Path,
         backup_base_dir: str = "backups",
+        accept_unknown_host_key: bool = False,
     ) -> "BatchSSHManager":
-        return cls(load_inventory(path), backup_base_dir=backup_base_dir)
+        return cls(
+            load_inventory(path),
+            backup_base_dir=backup_base_dir,
+            accept_unknown_host_key=accept_unknown_host_key,
+        )
 
     def _connect(self, device: InventoryDevice):
         # netmiko 4.x：ConnectHandler 不接受 read_timeout；读超时用 send_command(read_timeout=...)
@@ -107,6 +115,7 @@ class BatchSSHManager:
             "password": _device_password(device),
             "port": device.port,
             "conn_timeout": 30,
+            **netmiko_hostkey_kwargs(accept_unknown=self.accept_unknown_host_key),
         }
         conn = ConnectHandler(**params)
         try:

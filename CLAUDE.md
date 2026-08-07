@@ -128,8 +128,11 @@ response = adapter.execute(request)
 - Adapter：`success` 仅在 status ∈ {success, skipped, dry_run} 时为 True
 - 下发走 `CommandExecutor`（错误检测）
 - **SSH 真下发默认禁用**（`allow_ssh_deploy=False`）；仅 `dry_run=True` 或显式 `allow_ssh_deploy=True` 可走实验路径；连接在 `finally` 断开
-- `AgentRequest.allow_dangerous` / `auto_rollback_on_failure` / `allow_ssh_deploy` 为一等字段
-- 异常映射到 `CON*` / `CMD*` / `TPL*` / `DEP*` / `APT*` 错误码
+- **上联保护默认启用**（`allow_uplink_change=False`）；auto 识别 uplink 描述/宽 trunk
+- **SSH host key 默认拒绝未知**；`accept_unknown_host_key` 或 `HUAWEI_SSH_ACCEPT_UNKNOWN=1` 才 AutoAdd
+- `DeviceInfo.baudrate` 传入 `SerialConfig`
+- `AgentRequest.allow_dangerous` / `auto_rollback_on_failure` / `allow_ssh_deploy` / `allow_uplink_change` 为一等字段
+- 异常/状态映射到 `CON*` / `CMD*` / `TPL*` / `DEP004-006` / `APT*` 错误码（见 SKILL 错误码矩阵）
 
 ### 2. DeploymentPlanner（全面增强）
 - 支持去重、分类、生成回滚计划

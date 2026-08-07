@@ -28,6 +28,9 @@ _ACCESS_VARS = {
     "room": "01",
     "max_mac": "2",
     "monitor_port": "GigabitEthernet0/0/25",
+    # 金样例锁定 24 口（模板默认 1-16，测试显式拉满）
+    "access_port_start": 1,
+    "access_port_end": 24,
 }
 
 
